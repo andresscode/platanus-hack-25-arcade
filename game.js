@@ -91,7 +91,7 @@ const game = new Phaser.Game(config);
 const tileSize = 18;
 const mazeWidth = 28;
 const mazeHeight = 30;
-const offsetX = 100;
+const offsetX = (800 - mazeWidth * tileSize) / 2;
 const offsetY = 50;
 
 // Game variables
@@ -192,7 +192,7 @@ function create() {
   });
 
   // Instructions
-  this.add.text(400, 580, 'ARROW KEYS TO MOVE', {
+  this.add.text(400, 50, 'ARROW KEYS TO MOVE', {
     fontSize: '14px',
     fontFamily: 'Arial, sans-serif',
     color: '#888888',
@@ -258,17 +258,28 @@ function initGame() {
     y: offsetY + 23 * tileSize
   };
 
-  // Initialize ghosts (4 ghosts with different colors)
-  const ghostColors = [0xff0000, 0xffb8ff, 0x00ffff, 0xffb851];
+  // Initialize ghosts (4 ghosts with different colors and behaviors)
+  const ghostData = [
+    { color: 0xff0000, name: 'blinky', startX: 13, startY: 11 }, // Red - direct chase
+    { color: 0xffb8ff, name: 'pinky', startX: 13, startY: 14 },  // Pink - ambush
+    { color: 0x00ffff, name: 'inky', startX: 12, startY: 14 },   // Cyan - complex
+    { color: 0xffb851, name: 'clyde', startX: 14, startY: 14 }   // Orange - shy
+  ];
+
   for (let i = 0; i < 4; i++) {
+    const data = ghostData[i];
     ghosts.push({
-      gridX: 12 + i,
-      gridY: 14,
-      x: offsetX + (12 + i) * tileSize,
-      y: offsetY + 14 * tileSize,
-      color: ghostColors[i],
+      gridX: data.startX,
+      gridY: data.startY,
+      x: offsetX + data.startX * tileSize,
+      y: offsetY + data.startY * tileSize,
+      color: data.color,
+      name: data.name,
       direction: { x: 0, y: -1 },
-      vulnerable: false
+      vulnerable: false,
+      exitDelay: i * 2000, // Staggered exit
+      exitTimer: 0,
+      inSpawn: data.name !== 'blinky' // Blinky starts outside
     });
   }
 
@@ -315,7 +326,7 @@ function update(_time, delta) {
     // Try to change direction
     const testX = pacman.gridX + nextDirection.x;
     const testY = pacman.gridY + nextDirection.y;
-    if (!isWall(testX, testY)) {
+    if (!isWall(testX, testY) && !isGhostSpawn(testX, testY)) {
       direction = nextDirection;
     }
 
@@ -323,7 +334,7 @@ function update(_time, delta) {
     const newX = pacman.gridX + direction.x;
     const newY = pacman.gridY + direction.y;
 
-    if (!isWall(newX, newY)) {
+    if (!isWall(newX, newY) && !isGhostSpawn(newX, newY)) {
       pacman.gridX = newX;
       pacman.gridY = newY;
 
@@ -361,6 +372,11 @@ function isWall(gridX, gridY) {
   return mazeLayout[gridY][gridX] === 1;
 }
 
+function isGhostSpawn(gridX, gridY) {
+  // Ghost spawn area boundaries
+  return gridX >= 11 && gridX <= 16 && gridY >= 11 && gridY <= 17;
+}
+
 function checkPelletCollision() {
   // Check regular pellets
   for (let pellet of pellets) {
@@ -386,35 +402,103 @@ function checkPelletCollision() {
   }
 }
 
+function getGhostTarget(ghost) {
+  // Calculate target tile based on ghost personality
+  if (ghost.vulnerable) {
+    // Run away from Pacman
+    return {
+      x: ghost.gridX + (ghost.gridX - pacman.gridX) * 2,
+      y: ghost.gridY + (ghost.gridY - pacman.gridY) * 2
+    };
+  }
+
+  switch (ghost.name) {
+    case 'blinky':
+      // Red: Direct chase
+      return { x: pacman.gridX, y: pacman.gridY };
+
+    case 'pinky':
+      // Pink: Ambush 4 tiles ahead
+      return {
+        x: pacman.gridX + direction.x * 4,
+        y: pacman.gridY + direction.y * 4
+      };
+
+    case 'inky':
+      // Cyan: 2 tiles ahead of Pacman, then double distance from Blinky
+      const pivot = {
+        x: pacman.gridX + direction.x * 2,
+        y: pacman.gridY + direction.y * 2
+      };
+      const blinky = ghosts[0];
+      return {
+        x: pivot.x + (pivot.x - blinky.gridX),
+        y: pivot.y + (pivot.y - blinky.gridY)
+      };
+
+    case 'clyde':
+      // Orange: Chase if far (>8 tiles), scatter if close
+      const dist = Math.abs(ghost.gridX - pacman.gridX) + Math.abs(ghost.gridY - pacman.gridY);
+      if (dist > 8) {
+        return { x: pacman.gridX, y: pacman.gridY };
+      } else {
+        return { x: 0, y: mazeHeight - 1 }; // Scatter to corner
+      }
+
+    default:
+      return { x: pacman.gridX, y: pacman.gridY };
+  }
+}
+
 function moveGhosts() {
   ghosts.forEach(ghost => {
-    // Simple AI: try to move towards/away from Pacman
+    // Handle spawn exit
+    if (ghost.inSpawn) {
+      ghost.exitTimer += ghostMoveDelay;
+      if (ghost.exitTimer >= ghost.exitDelay) {
+        ghost.inSpawn = false;
+      } else {
+        // Move up and down in spawn
+        if (ghost.gridY <= 11) {
+          ghost.direction = { x: 0, y: 1 };
+        } else if (ghost.gridY >= 15) {
+          ghost.direction = { x: 0, y: -1 };
+        }
+        ghost.gridY += ghost.direction.y;
+        ghost.y = offsetY + ghost.gridY * tileSize;
+        return;
+      }
+    }
+
+    // Get target based on personality
+    const target = getGhostTarget(ghost);
     let possibleDirs = [];
 
     // Check all 4 directions
     const dirs = [
-      { x: 0, y: -1 },
-      { x: 0, y: 1 },
-      { x: -1, y: 0 },
-      { x: 1, y: 0 }
+      { x: 0, y: -1 }, // up
+      { x: 0, y: 1 },  // down
+      { x: -1, y: 0 }, // left
+      { x: 1, y: 0 }   // right
     ];
 
     for (let dir of dirs) {
       const newX = ghost.gridX + dir.x;
       const newY = ghost.gridY + dir.y;
 
-      // Don't reverse direction
-      if (dir.x === -ghost.direction.x && dir.y === -ghost.direction.y) continue;
+      // Don't reverse direction (unless vulnerable)
+      if (!ghost.vulnerable && dir.x === -ghost.direction.x && dir.y === -ghost.direction.y) continue;
 
       if (!isWall(newX, newY)) {
-        const dist = Math.abs(newX - pacman.gridX) + Math.abs(newY - pacman.gridY);
+        // Calculate distance to target
+        const dist = Math.abs(newX - target.x) + Math.abs(newY - target.y);
         possibleDirs.push({ dir, dist });
       }
     }
 
     if (possibleDirs.length > 0) {
-      // If vulnerable, run away (pick furthest). Otherwise chase (pick closest)
-      possibleDirs.sort((a, b) => ghost.vulnerable ? b.dist - a.dist : a.dist - b.dist);
+      // Sort by distance - pick closest to target
+      possibleDirs.sort((a, b) => a.dist - b.dist);
       ghost.direction = possibleDirs[0].dir;
     }
 
@@ -439,11 +523,21 @@ function checkGhostCollision() {
         // Eat ghost
         score += 200;
         scoreText.setText('SCORE: ' + score);
-        ghost.gridX = 13 + i;
-        ghost.gridY = 14;
+        // Send back to spawn
+        const startPositions = [
+          { x: 13, y: 11 },
+          { x: 13, y: 14 },
+          { x: 12, y: 14 },
+          { x: 14, y: 14 }
+        ];
+        const pos = startPositions[i];
+        ghost.gridX = pos.x;
+        ghost.gridY = pos.y;
         ghost.x = offsetX + ghost.gridX * tileSize;
         ghost.y = offsetY + ghost.gridY * tileSize;
         ghost.vulnerable = false;
+        ghost.inSpawn = ghost.name !== 'blinky';
+        ghost.exitTimer = 0;
         playTone(sceneRef, 1200, 0.15);
       } else {
         // Lose a life
@@ -460,10 +554,19 @@ function checkGhostCollision() {
           pacman.y = offsetY + 23 * tileSize;
 
           for (let j = 0; j < ghosts.length; j++) {
-            ghosts[j].gridX = 12 + j;
-            ghosts[j].gridY = 14;
-            ghosts[j].x = offsetX + (12 + j) * tileSize;
-            ghosts[j].y = offsetY + 14 * tileSize;
+            const startPositions = [
+              { x: 13, y: 11 },
+              { x: 13, y: 14 },
+              { x: 12, y: 14 },
+              { x: 14, y: 14 }
+            ];
+            const pos = startPositions[j];
+            ghosts[j].gridX = pos.x;
+            ghosts[j].gridY = pos.y;
+            ghosts[j].x = offsetX + pos.x * tileSize;
+            ghosts[j].y = offsetY + pos.y * tileSize;
+            ghosts[j].inSpawn = ghosts[j].name !== 'blinky';
+            ghosts[j].exitTimer = 0;
           }
 
           direction = { x: 1, y: 0 };
