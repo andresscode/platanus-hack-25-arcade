@@ -102,8 +102,11 @@ let powerPellets = [];
 let walls = [];
 let score = 0;
 let lives = 3;
+let level = 1;
 let scoreText;
 let livesText;
+let levelText;
+let highScoreText;
 let startText;
 let gameStarted = false;
 let gameOver = false;
@@ -121,6 +124,14 @@ let powerTimer = 0;
 let powerDuration = 8000;
 let mouthOpen = true;
 let animTimer = 0;
+let modeTimer = 0;
+let modeIndex = 0;
+let scatterMode = true;
+let bgMusic;
+let eatSound;
+const modeDurations = [7000, 20000, 7000, 20000, 5000, 20000, 5000];
+let highScore = 0;
+let highScoreName = 'AAA';
 
 // Simplified maze layout (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 const mazeLayout = [
@@ -160,6 +171,14 @@ function create() {
   sceneRef = this;
   graphics = this.add.graphics();
 
+  // Load high score from localStorage
+  const saved = localStorage.getItem('pacmanHighScore');
+  if (saved) {
+    const data = JSON.parse(saved);
+    highScore = data.score || 0;
+    highScoreName = data.name || 'AAA';
+  }
+
   // Score display
   scoreText = this.add.text(16, 16, 'SCORE: 0', {
     fontSize: '18px',
@@ -168,11 +187,27 @@ function create() {
   });
 
   // Lives display
-  livesText = this.add.text(680, 16, 'LIVES: 3', {
+  livesText = this.add.text(708, 16, 'LIVES: 3', {
     fontSize: '18px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
   });
+
+  // Level display
+  levelText = this.add.text(400, 16, 'LEVEL: 1', {
+    fontSize: '18px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#00ffff',
+    align: 'center'
+  }).setOrigin(0.5);
+
+  // High score display
+  highScoreText = this.add.text(400, 36, 'HI-SCORE: ' + highScore + ' (' + highScoreName + ')', {
+    fontSize: '14px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffff00',
+    align: 'center'
+  }).setOrigin(0.5);
 
   // Start instructions
   startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
@@ -191,18 +226,13 @@ function create() {
     repeat: -1
   });
 
-  // Instructions
-  this.add.text(400, 50, 'ARROW KEYS TO MOVE', {
-    fontSize: '14px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#888888',
-    align: 'center'
-  }).setOrigin(0.5);
-
   // Initialize game
   initGame();
 
-  // Keyboard and Arcade Button input
+  // Start background music
+  startBgMusic(this);
+
+  // Keyboard input
   this.input.keyboard.on('keydown', (event) => {
     if (!gameStarted && event.code === 'Space') {
       startGame();
@@ -260,10 +290,10 @@ function initGame() {
 
   // Initialize ghosts (4 ghosts with different colors and behaviors)
   const ghostData = [
-    { color: 0xff0000, name: 'blinky', startX: 13, startY: 11 }, // Red - direct chase
-    { color: 0xffb8ff, name: 'pinky', startX: 13, startY: 14 },  // Pink - ambush
-    { color: 0x00ffff, name: 'inky', startX: 12, startY: 14 },   // Cyan - complex
-    { color: 0xffb851, name: 'clyde', startX: 14, startY: 14 }   // Orange - shy
+    { color: 0xff0000, name: 'blinky', startX: 13, startY: 11, corner: { x: mazeWidth - 2, y: 0 } },
+    { color: 0xffb8ff, name: 'pinky', startX: 13, startY: 14, corner: { x: 2, y: 0 } },
+    { color: 0x00ffff, name: 'inky', startX: 12, startY: 14, corner: { x: mazeWidth - 2, y: mazeHeight - 2 } },
+    { color: 0xffb851, name: 'clyde', startX: 14, startY: 14, corner: { x: 2, y: mazeHeight - 2 } }
   ];
 
   for (let i = 0; i < 4; i++) {
@@ -277,9 +307,11 @@ function initGame() {
       name: data.name,
       direction: { x: 0, y: -1 },
       vulnerable: false,
-      exitDelay: i * 2000, // Staggered exit
+      exitDelay: i * 3000,
       exitTimer: 0,
-      inSpawn: data.name !== 'blinky' // Blinky starts outside
+      inSpawn: true,
+      scatterTarget: data.corner,
+      visualOffset: i * 0.25
     });
   }
 
@@ -287,6 +319,9 @@ function initGame() {
   nextDirection = { x: 0, y: 0 };
   powerMode = false;
   powerTimer = 0;
+  modeTimer = 0;
+  modeIndex = 0;
+  scatterMode = true;
 }
 
 function startGame() {
@@ -306,6 +341,16 @@ function update(_time, delta) {
   if (animTimer > 150) {
     mouthOpen = !mouthOpen;
     animTimer = 0;
+  }
+
+  // Update scatter/chase mode
+  if (!powerMode && modeIndex < modeDurations.length) {
+    modeTimer += delta;
+    if (modeTimer >= modeDurations[modeIndex]) {
+      modeTimer = 0;
+      modeIndex++;
+      scatterMode = !scatterMode;
+    }
   }
 
   // Update power mode timer
@@ -360,9 +405,9 @@ function update(_time, delta) {
   // Check ghost collision
   checkGhostCollision();
 
-  // Check win condition
+  // Check win condition - advance to next level
   if (pellets.every(p => p.eaten) && powerPellets.every(p => p.eaten)) {
-    winGame();
+    nextLevel();
   }
 }
 
@@ -384,6 +429,9 @@ function checkPelletCollision() {
       pellet.eaten = true;
       score += 10;
       scoreText.setText('SCORE: ' + score);
+      if (score > highScore) {
+        highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+      }
       playTone(sceneRef, 880, 0.05);
     }
   }
@@ -394,6 +442,9 @@ function checkPelletCollision() {
       pellet.eaten = true;
       score += 50;
       scoreText.setText('SCORE: ' + score);
+      if (score > highScore) {
+        highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+      }
       powerMode = true;
       powerTimer = 0;
       ghosts.forEach(g => g.vulnerable = true);
@@ -412,6 +463,12 @@ function getGhostTarget(ghost) {
     };
   }
 
+  // Scatter mode - go to corners
+  if (scatterMode) {
+    return ghost.scatterTarget;
+  }
+
+  // Chase mode - different behaviors per ghost
   switch (ghost.name) {
     case 'blinky':
       // Red: Direct chase
@@ -442,7 +499,7 @@ function getGhostTarget(ghost) {
       if (dist > 8) {
         return { x: pacman.gridX, y: pacman.gridY };
       } else {
-        return { x: 0, y: mazeHeight - 1 }; // Scatter to corner
+        return ghost.scatterTarget;
       }
 
     default:
@@ -456,16 +513,16 @@ function moveGhosts() {
     if (ghost.inSpawn) {
       ghost.exitTimer += ghostMoveDelay;
       if (ghost.exitTimer >= ghost.exitDelay) {
-        ghost.inSpawn = false;
-      } else {
-        // Move up and down in spawn
-        if (ghost.gridY <= 11) {
-          ghost.direction = { x: 0, y: 1 };
-        } else if (ghost.gridY >= 15) {
-          ghost.direction = { x: 0, y: -1 };
+        // Exit spawn - move to exit position
+        if (ghost.gridY > 11) {
+          ghost.gridY--;
+          ghost.y = offsetY + ghost.gridY * tileSize;
+        } else {
+          ghost.inSpawn = false;
         }
-        ghost.gridY += ghost.direction.y;
-        ghost.y = offsetY + ghost.gridY * tileSize;
+        return;
+      } else {
+        // Idle in spawn - slight bobbing
         return;
       }
     }
@@ -523,6 +580,9 @@ function checkGhostCollision() {
         // Eat ghost
         score += 200;
         scoreText.setText('SCORE: ' + score);
+        if (score > highScore) {
+          highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+        }
         // Send back to spawn
         const startPositions = [
           { x: 13, y: 11 },
@@ -582,9 +642,11 @@ function checkGhostCollision() {
 function drawGame() {
   graphics.clear();
 
-  // Draw maze walls
-  graphics.fillStyle(0x0000ff, 1);
+  // Draw maze walls with gradient effect
   walls.forEach(wall => {
+    const hue = (wall.x + wall.y) * 0.1;
+    const color = Phaser.Display.Color.HSVToRGB(hue % 1, 0.8, 0.6);
+    graphics.fillStyle(Phaser.Display.Color.GetColor(color.r * 255, color.g * 255, color.b * 255), 1);
     graphics.fillRect(
       offsetX + wall.x * tileSize + 1,
       offsetY + wall.y * tileSize + 1,
@@ -620,37 +682,46 @@ function drawGame() {
   // Draw Pacman
   drawPacman();
 
-  // Draw ghosts
+  // Draw ghosts with visual offset to prevent overlap
   ghosts.forEach(ghost => {
+    const offsetAdjust = Math.sin(Date.now() / 1000 + ghost.visualOffset * Math.PI * 2) * 2;
+
     if (ghost.vulnerable) {
       const flicker = powerTimer > powerDuration - 2000 && Math.floor(powerTimer / 200) % 2;
-      graphics.fillStyle(flicker ? 0xffffff : 0x0000ff, 1);
+      graphics.fillStyle(flicker ? 0xffffff : 0x2121de, 1);
     } else {
       graphics.fillStyle(ghost.color, 1);
     }
 
     // Ghost body
     graphics.fillCircle(
-      ghost.x + tileSize / 2,
+      ghost.x + tileSize / 2 + offsetAdjust,
       ghost.y + tileSize / 2 - 2,
       tileSize / 2 - 2
     );
 
     graphics.fillRect(
-      ghost.x + 2,
+      ghost.x + 2 + offsetAdjust,
       ghost.y + tileSize / 2,
       tileSize - 4,
       tileSize / 2 - 2
     );
 
-    // Ghost eyes (unless vulnerable)
-    if (!ghost.vulnerable) {
-      graphics.fillStyle(0xffffff, 1);
-      graphics.fillCircle(ghost.x + 6, ghost.y + 7, 2.5);
-      graphics.fillCircle(ghost.x + 12, ghost.y + 7, 2.5);
+    // Ghost eyes - ALWAYS visible
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 7, 2.5);
+    graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 7, 2.5);
+
+    if (ghost.vulnerable) {
+      // Smaller blue pupils when vulnerable
       graphics.fillStyle(0x0000ff, 1);
-      graphics.fillCircle(ghost.x + 6, ghost.y + 7, 1);
-      graphics.fillCircle(ghost.x + 12, ghost.y + 7, 1);
+      graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 8, 1);
+      graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 8, 1);
+    } else {
+      // Normal pupils
+      graphics.fillStyle(0x0000ff, 1);
+      graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 7, 1);
+      graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 7, 1);
     }
   });
 }
@@ -683,42 +754,50 @@ function drawPacman() {
   }
 }
 
-function winGame() {
-  gameWon = true;
+function nextLevel() {
+  level++;
+  levelText.setText('LEVEL: ' + level);
 
-  const overlay = sceneRef.add.graphics();
-  overlay.fillStyle(0x000000, 0.8);
-  overlay.fillRect(0, 0, 800, 600);
+  // Reset pellets
+  pellets.forEach(p => p.eaten = false);
+  powerPellets.forEach(p => p.eaten = false);
 
-  const winText = sceneRef.add.text(400, 250, 'YOU WIN!', {
-    fontSize: '64px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffff00',
-    stroke: '#000000',
-    strokeThickness: 8
-  }).setOrigin(0.5);
+  // Reset positions
+  pacman.gridX = 14;
+  pacman.gridY = 23;
+  pacman.x = offsetX + 14 * tileSize;
+  pacman.y = offsetY + 23 * tileSize;
 
-  sceneRef.tweens.add({
-    targets: winText,
-    scale: { from: 1, to: 1.2 },
-    duration: 800,
-    yoyo: true,
-    repeat: -1
-  });
+  const startPositions = [
+    { x: 13, y: 11 },
+    { x: 13, y: 14 },
+    { x: 12, y: 14 },
+    { x: 14, y: 14 }
+  ];
 
-  sceneRef.add.text(400, 350, 'SCORE: ' + score, {
-    fontSize: '36px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
-  }).setOrigin(0.5);
+  for (let i = 0; i < ghosts.length; i++) {
+    const pos = startPositions[i];
+    ghosts[i].gridX = pos.x;
+    ghosts[i].gridY = pos.y;
+    ghosts[i].x = offsetX + pos.x * tileSize;
+    ghosts[i].y = offsetY + pos.y * tileSize;
+    ghosts[i].inSpawn = true;
+    ghosts[i].exitTimer = 0;
+    ghosts[i].vulnerable = false;
+  }
 
-  sceneRef.add.text(400, 450, 'Press R to Play Again', {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#00ffff'
-  }).setOrigin(0.5);
+  direction = { x: 1, y: 0 };
+  nextDirection = { x: 1, y: 0 };
+  powerMode = false;
+  powerTimer = 0;
+  modeTimer = 0;
+  modeIndex = 0;
+  scatterMode = true;
 
-  playTone(sceneRef, 660, 0.3);
+  // Increase difficulty
+  if (ghostMoveDelay > 80) ghostMoveDelay -= 10;
+
+  playTone(sceneRef, 880, 0.2);
 }
 
 function endGame() {
@@ -729,7 +808,7 @@ function endGame() {
   overlay.fillStyle(0x000000, 0.8);
   overlay.fillRect(0, 0, 800, 600);
 
-  const gameOverText = sceneRef.add.text(400, 250, 'GAME OVER', {
+  const gameOverText = sceneRef.add.text(400, 200, 'GAME OVER', {
     fontSize: '64px',
     fontFamily: 'Arial, sans-serif',
     color: '#ff0000',
@@ -745,31 +824,81 @@ function endGame() {
     repeat: -1
   });
 
-  sceneRef.add.text(400, 350, 'SCORE: ' + score, {
+  sceneRef.add.text(400, 300, 'FINAL SCORE: ' + score, {
     fontSize: '36px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
   }).setOrigin(0.5);
 
-  sceneRef.add.text(400, 450, 'Press R to Restart', {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#00ffff'
-  }).setOrigin(0.5);
+  // Check for high score
+  if (score > highScore) {
+    highScore = score;
+
+    sceneRef.add.text(400, 360, 'NEW HIGH SCORE!', {
+      fontSize: '28px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffff00'
+    }).setOrigin(0.5);
+
+    // Prompt for name
+    const namePrompt = sceneRef.add.text(400, 420, 'Enter your name (3 letters):', {
+      fontSize: '20px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+
+    let nameInput = '';
+    const nameDisplay = sceneRef.add.text(400, 450, '___', {
+      fontSize: '32px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#00ffff'
+    }).setOrigin(0.5);
+
+    sceneRef.input.keyboard.on('keydown', function handleName(e) {
+      if (nameInput.length < 3 && e.key.match(/^[a-zA-Z]$/)) {
+        nameInput += e.key.toUpperCase();
+        nameDisplay.setText(nameInput + '___'.substring(nameInput.length));
+      } else if (e.code === 'Backspace' && nameInput.length > 0) {
+        nameInput = nameInput.slice(0, -1);
+        nameDisplay.setText(nameInput + '___'.substring(nameInput.length));
+      } else if (e.code === 'Enter' && nameInput.length === 3) {
+        highScoreName = nameInput;
+        localStorage.setItem('pacmanHighScore', JSON.stringify({ score: highScore, name: highScoreName }));
+        sceneRef.input.keyboard.off('keydown', handleName);
+        namePrompt.destroy();
+        nameDisplay.destroy();
+        sceneRef.add.text(400, 450, 'Saved! Press R to Restart', {
+          fontSize: '20px',
+          fontFamily: 'Arial, sans-serif',
+          color: '#00ff00'
+        }).setOrigin(0.5);
+      }
+    });
+  } else {
+    sceneRef.add.text(400, 450, 'Press R to Restart', {
+      fontSize: '24px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#00ffff'
+    }).setOrigin(0.5);
+  }
 }
 
 function restartGame() {
   score = 0;
   lives = 3;
+  level = 1;
   gameOver = false;
   gameWon = false;
   gameStarted = false;
   moveTimer = 0;
   ghostMoveTimer = 0;
+  ghostMoveDelay = 180;
   animTimer = 0;
 
   scoreText.setText('SCORE: 0');
   livesText.setText('LIVES: 3');
+  levelText.setText('LEVEL: 1');
+  highScoreText.setText('HI-SCORE: ' + highScore + ' (' + highScoreName + ')');
 
   sceneRef.scene.restart();
 }
@@ -790,4 +919,62 @@ function playTone(scene, frequency, duration) {
 
   oscillator.start(audioContext.currentTime);
   oscillator.stop(audioContext.currentTime + duration);
+}
+
+function startBgMusic(scene) {
+  const ctx = scene.sound.context;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0.08;
+  masterGain.connect(ctx.destination);
+
+  // Pac-Man theme melody notes (simplified)
+  const melody = [
+    { freq: 493.88, dur: 0.15 }, // B4
+    { freq: 587.33, dur: 0.15 }, // D5
+    { freq: 493.88, dur: 0.15 }, // B4
+    { freq: 392.00, dur: 0.15 }, // G4
+    { freq: 493.88, dur: 0.3 },  // B4
+    { freq: 392.00, dur: 0.3 },  // G4
+    { freq: 493.88, dur: 0.15 }, // B4
+    { freq: 587.33, dur: 0.15 }, // D5
+    { freq: 493.88, dur: 0.15 }, // B4
+    { freq: 392.00, dur: 0.15 }, // G4
+    { freq: 493.88, dur: 0.3 },  // B4
+    { freq: 392.00, dur: 0.3 }   // G4
+  ];
+
+  let noteIndex = 0;
+  let startTime = ctx.currentTime;
+
+  function playNextNote() {
+    if (!gameStarted && !gameOver) {
+      setTimeout(playNextNote, 100);
+      return;
+    }
+
+    if (gameOver) return;
+
+    const note = melody[noteIndex % melody.length];
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.frequency.value = note.freq;
+    osc.type = 'square';
+
+    gain.gain.setValueAtTime(0.3, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
+
+    osc.start(startTime);
+    osc.stop(startTime + note.dur);
+
+    startTime += note.dur;
+    noteIndex++;
+
+    setTimeout(playNextNote, note.dur * 1000);
+  }
+
+  playNextNote();
 }
