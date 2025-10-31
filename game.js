@@ -136,6 +136,8 @@ const modeDurations = [7000, 20000, 7000, 20000, 5000, 20000, 5000];
 let highScore = 0;
 let highScoreName = 'AAA';
 let glowTimer = 0;
+let floatingTexts = [];
+let ghostEatCombo = 0;
 
 // Simplified maze layout (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 const mazeLayout = [
@@ -367,6 +369,9 @@ function update(_time, delta) {
   // Update particles
   updateParticles(delta);
 
+  // Update floating texts
+  updateFloatingTexts(delta);
+
   // Update scatter/chase mode
   if (!powerMode && modeIndex < modeDurations.length) {
     modeTimer += delta;
@@ -383,6 +388,7 @@ function update(_time, delta) {
     if (powerTimer >= powerDuration) {
       powerMode = false;
       powerTimer = 0;
+      ghostEatCombo = 0; // Reset combo when power mode ends
       ghosts.forEach(g => g.vulnerable = false);
     }
   }
@@ -489,6 +495,7 @@ function checkPelletCollision() {
       }
       powerMode = true;
       powerTimer = 0;
+      ghostEatCombo = 0; // Reset combo counter
       ghosts.forEach(g => g.vulnerable = true);
 
       // Create explosion effect for power pellet
@@ -653,8 +660,10 @@ function checkGhostCollision() {
     const ghost = ghosts[i];
     if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
       if (ghost.vulnerable) {
-        // Eat ghost
-        score += 200;
+        // Eat ghost - combo scoring
+        ghostEatCombo++;
+        const points = 200 * ghostEatCombo;
+        score += points;
         scoreText.setText('SCORE: ' + score);
         if (score > highScore) {
           highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
@@ -666,6 +675,14 @@ function checkGhostCollision() {
           ghost.y + tileSize / 2,
           ghost.color,
           20
+        );
+
+        // Create floating point text
+        createFloatingText(
+          ghost.x + tileSize / 2,
+          ghost.y + tileSize / 2,
+          '+' + points,
+          0x00ffff
         );
 
         // Send back to spawn
@@ -832,12 +849,7 @@ function drawPacman() {
   const centerX = pacman.x + tileSize / 2;
   const centerY = pacman.y + tileSize / 2;
 
-  // Draw neon glow effect
-  const glowIntensity = Math.sin(glowTimer / 100) * 0.3 + 0.7;
-  graphics.fillStyle(0xffff00, 0.3);
-  graphics.fillCircle(centerX, centerY, tileSize / 2 + 2);
-
-  graphics.fillStyle(0xffff00, glowIntensity);
+  graphics.fillStyle(0xffff00, 1);
 
   if (mouthOpen) {
     // Draw Pacman with mouth open
@@ -1210,4 +1222,42 @@ function drawParticles() {
     graphics.fillStyle(p.color, p.life);
     graphics.fillCircle(p.x, p.y, p.size * p.life);
   });
+}
+
+function createFloatingText(x, y, text, color) {
+  const textObj = sceneRef.add.text(x, y, text, {
+    fontSize: '24px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#' + color.toString(16).padStart(6, '0'),
+    stroke: '#000000',
+    strokeThickness: 4,
+    fontStyle: 'bold'
+  }).setOrigin(0.5);
+
+  floatingTexts.push({
+    textObj: textObj,
+    life: 1.5,
+    startY: y,
+    velocity: -50
+  });
+}
+
+function updateFloatingTexts(delta) {
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.life -= delta / 1000;
+
+    if (ft.life <= 0) {
+      ft.textObj.destroy();
+      floatingTexts.splice(i, 1);
+    } else {
+      // Float upward
+      ft.textObj.y += ft.velocity * (delta / 1000);
+      // Fade out
+      ft.textObj.setAlpha(ft.life / 1.5);
+      // Scale pulse
+      const scale = 1 + Math.sin(ft.life * 5) * 0.2;
+      ft.textObj.setScale(scale);
+    }
+  }
 }
