@@ -138,6 +138,11 @@ let highScoreName = 'AAA';
 let glowTimer = 0;
 let floatingTexts = [];
 let ghostEatCombo = 0;
+let banana = null;
+let bananaTimer = 0;
+let bananaSpawnDelay = 10000; // Spawn banana after 10 seconds
+let bananaLifetime = 10000; // Banana stays for 10 seconds
+let bananaSpawnedThisLevel = false;
 
 // Simplified maze layout (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 const mazeLayout = [
@@ -372,6 +377,22 @@ function update(_time, delta) {
   // Update floating texts
   updateFloatingTexts(delta);
 
+  // Update banana spawn/lifetime (only once per level)
+  if (!bananaSpawnedThisLevel) {
+    bananaTimer += delta;
+    if (!banana && bananaTimer >= bananaSpawnDelay) {
+      spawnBanana();
+      bananaTimer = 0;
+      bananaSpawnedThisLevel = true;
+    }
+  }
+  if (banana) {
+    banana.lifetime += delta;
+    if (banana.lifetime >= bananaLifetime) {
+      banana = null;
+    }
+  }
+
   // Update scatter/chase mode
   if (!powerMode && modeIndex < modeDurations.length) {
     modeTimer += delta;
@@ -428,6 +449,9 @@ function update(_time, delta) {
 
       // Check pellet collision
       checkPelletCollision();
+
+      // Check banana collision
+      checkBananaCollision();
     }
   }
 
@@ -795,6 +819,11 @@ function drawGame() {
     }
   });
 
+  // Draw banana
+  if (banana) {
+    drawBanana();
+  }
+
   // Draw Pacman
   drawPacman();
 
@@ -937,6 +966,11 @@ function continueToNextLevel() {
   // Reset pellets
   pellets.forEach(p => p.eaten = false);
   powerPellets.forEach(p => p.eaten = false);
+
+  // Reset banana for new level
+  banana = null;
+  bananaTimer = 0;
+  bananaSpawnedThisLevel = false;
 
   // Reset positions
   pacman.gridX = 14;
@@ -1260,4 +1294,94 @@ function updateFloatingTexts(delta) {
       ft.textObj.setScale(scale);
     }
   }
+}
+
+function spawnBanana() {
+  // Spawn in the corridor below the ghost spawn (y = 17, center x)
+  banana = {
+    gridX: 13,
+    gridY: 17,
+    lifetime: 0
+  };
+}
+
+function checkBananaCollision() {
+  if (banana && banana.gridX === pacman.gridX && banana.gridY === pacman.gridY) {
+    // Eat banana
+    const points = 300;
+    score += points;
+    scoreText.setText('SCORE: ' + score);
+    if (score > highScore) {
+      highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+    }
+
+    // Create particle explosion
+    createParticleExplosion(
+      offsetX + banana.gridX * tileSize + tileSize / 2,
+      offsetY + banana.gridY * tileSize + tileSize / 2,
+      0xffe135,
+      12
+    );
+
+    // Create floating text
+    createFloatingText(
+      offsetX + banana.gridX * tileSize + tileSize / 2,
+      offsetY + banana.gridY * tileSize + tileSize / 2,
+      '+' + points,
+      0xffe135
+    );
+
+    banana = null;
+    playTone(sceneRef, 1000, 0.1);
+  }
+}
+
+function drawBanana() {
+  // Center banana across 2 tiles
+  const bx = offsetX + banana.gridX * tileSize;
+  const by = offsetY + banana.gridY * tileSize + tileSize / 2;
+
+  // Classic comic/pixel art banana - curved elongated shape
+  // Main banana body (bright yellow)
+  graphics.fillStyle(0xffed4e, 1);
+
+  // Draw curved banana using bezier-like path
+  graphics.beginPath();
+  graphics.moveTo(bx + 4, by - 3);
+  // Top curve
+  graphics.lineTo(bx + 8, by - 5);
+  graphics.lineTo(bx + 16, by - 6);
+  graphics.lineTo(bx + 24, by - 5);
+  graphics.lineTo(bx + 30, by - 2);
+  // Right tip
+  graphics.lineTo(bx + 32, by);
+  graphics.lineTo(bx + 30, by + 2);
+  // Bottom curve
+  graphics.lineTo(bx + 24, by + 4);
+  graphics.lineTo(bx + 16, by + 5);
+  graphics.lineTo(bx + 8, by + 4);
+  graphics.lineTo(bx + 4, by + 2);
+  // Left tip
+  graphics.lineTo(bx + 2, by);
+  graphics.closePath();
+  graphics.fillPath();
+
+  // Dark brown/green stem on left end
+  graphics.fillStyle(0x6b4423, 1);
+  graphics.fillRect(bx + 2, by - 2, 3, 4);
+
+  // Dark brown tip on right end
+  graphics.fillStyle(0x654321, 1);
+  graphics.fillCircle(bx + 31, by, 2);
+
+  // Brown spots (classic banana spots)
+  graphics.fillStyle(0x8b6914, 1);
+  graphics.fillCircle(bx + 10, by - 1, 1.5);
+  graphics.fillCircle(bx + 18, by + 1, 1.8);
+  graphics.fillCircle(bx + 25, by - 1, 1.3);
+  graphics.fillEllipse(bx + 14, by + 2, 2.5, 1.2);
+
+  // Highlight stripe down the middle (makes it look 3D)
+  graphics.fillStyle(0xfff68f, 0.5);
+  graphics.fillRect(bx + 8, by - 3, 20, 2);
 }
