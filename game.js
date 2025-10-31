@@ -100,6 +100,7 @@ let ghosts = [];
 let pellets = [];
 let powerPellets = [];
 let walls = [];
+let particles = [];
 let score = 0;
 let lives = 3;
 let level = 1;
@@ -116,9 +117,10 @@ let sceneRef;
 let direction = { x: 0, y: 0 };
 let nextDirection = { x: 0, y: 0 };
 let moveTimer = 0;
-let moveDelay = 120;
+let moveDelay = 100;
 let ghostMoveTimer = 0;
-let ghostMoveDelay = 180;
+let ghostMoveDelay = 150;
+let vulnerableGhostDelay = 220;
 let powerMode = false;
 let powerTimer = 0;
 let powerDuration = 8000;
@@ -132,6 +134,7 @@ let eatSound;
 const modeDurations = [7000, 20000, 7000, 20000, 5000, 20000, 5000];
 let highScore = 0;
 let highScoreName = 'AAA';
+let glowTimer = 0;
 
 // Simplified maze layout (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 const mazeLayout = [
@@ -280,12 +283,15 @@ function initGame() {
     }
   }
 
-  // Initialize Pacman
+  // Initialize Pacman with smooth movement
   pacman = {
     gridX: 14,
     gridY: 23,
     x: offsetX + 14 * tileSize,
-    y: offsetY + 23 * tileSize
+    y: offsetY + 23 * tileSize,
+    targetX: offsetX + 14 * tileSize,
+    targetY: offsetY + 23 * tileSize,
+    movingTo: null
   };
 
   // Initialize ghosts (4 ghosts with different colors and behaviors)
@@ -303,6 +309,8 @@ function initGame() {
       gridY: data.startY,
       x: offsetX + data.startX * tileSize,
       y: offsetY + data.startY * tileSize,
+      targetX: offsetX + data.startX * tileSize,
+      targetY: offsetY + data.startY * tileSize,
       color: data.color,
       name: data.name,
       direction: { x: 0, y: -1 },
@@ -311,7 +319,8 @@ function initGame() {
       exitTimer: 0,
       inSpawn: true,
       scatterTarget: data.corner,
-      visualOffset: i * 0.25
+      visualOffset: i * 0.25,
+      lastDirection: { x: 0, y: -1 }
     });
   }
 
@@ -337,11 +346,15 @@ function update(_time, delta) {
 
   if (!gameStarted || gameOver || gameWon) return;
 
+  glowTimer += delta;
   animTimer += delta;
   if (animTimer > 150) {
     mouthOpen = !mouthOpen;
     animTimer = 0;
   }
+
+  // Update particles
+  updateParticles(delta);
 
   // Update scatter/chase mode
   if (!powerMode && modeIndex < modeDurations.length) {
@@ -363,6 +376,9 @@ function update(_time, delta) {
     }
   }
 
+  // Smooth Pacman movement
+  smoothMovement(pacman, delta);
+
   // Move Pacman
   moveTimer += delta;
   if (moveTimer >= moveDelay) {
@@ -371,7 +387,7 @@ function update(_time, delta) {
     // Try to change direction
     const testX = pacman.gridX + nextDirection.x;
     const testY = pacman.gridY + nextDirection.y;
-    if (!isWall(testX, testY) && !isGhostSpawn(testX, testY)) {
+    if (!isWall(testX, testY) && !isGhostSpawnCenter(testX, testY)) {
       direction = nextDirection;
     }
 
@@ -379,7 +395,7 @@ function update(_time, delta) {
     const newX = pacman.gridX + direction.x;
     const newY = pacman.gridY + direction.y;
 
-    if (!isWall(newX, newY) && !isGhostSpawn(newX, newY)) {
+    if (!isWall(newX, newY) && !isGhostSpawnCenter(newX, newY)) {
       pacman.gridX = newX;
       pacman.gridY = newY;
 
@@ -387,20 +403,24 @@ function update(_time, delta) {
       if (pacman.gridX < 0) pacman.gridX = mazeWidth - 1;
       if (pacman.gridX >= mazeWidth) pacman.gridX = 0;
 
-      pacman.x = offsetX + pacman.gridX * tileSize;
-      pacman.y = offsetY + pacman.gridY * tileSize;
+      pacman.targetX = offsetX + pacman.gridX * tileSize;
+      pacman.targetY = offsetY + pacman.gridY * tileSize;
 
       // Check pellet collision
       checkPelletCollision();
     }
   }
 
-  // Move ghosts
+  // Move ghosts - use different delay for vulnerable ghosts
   ghostMoveTimer += delta;
-  if (ghostMoveTimer >= ghostMoveDelay) {
+  const currentDelay = powerMode ? vulnerableGhostDelay : ghostMoveDelay;
+  if (ghostMoveTimer >= currentDelay) {
     ghostMoveTimer = 0;
     moveGhosts();
   }
+
+  // Smooth ghost movement
+  ghosts.forEach(g => smoothMovement(g, delta));
 
   // Check ghost collision
   checkGhostCollision();
@@ -420,6 +440,11 @@ function isWall(gridX, gridY) {
 function isGhostSpawn(gridX, gridY) {
   // Ghost spawn area boundaries
   return gridX >= 11 && gridX <= 16 && gridY >= 11 && gridY <= 17;
+}
+
+function isGhostSpawnCenter(gridX, gridY) {
+  // Only the inner spawn box is blocked for Pacman
+  return gridX >= 12 && gridX <= 15 && gridY >= 12 && gridY <= 15;
 }
 
 function checkPelletCollision() {
@@ -448,6 +473,15 @@ function checkPelletCollision() {
       powerMode = true;
       powerTimer = 0;
       ghosts.forEach(g => g.vulnerable = true);
+
+      // Create explosion effect for power pellet
+      createParticleExplosion(
+        offsetX + pellet.x * tileSize + tileSize / 2,
+        offsetY + pellet.y * tileSize + tileSize / 2,
+        0xffb897,
+        15
+      );
+
       playTone(sceneRef, 660, 0.2);
     }
   }
@@ -508,7 +542,7 @@ function getGhostTarget(ghost) {
 }
 
 function moveGhosts() {
-  ghosts.forEach(ghost => {
+  ghosts.forEach((ghost, index) => {
     // Handle spawn exit
     if (ghost.inSpawn) {
       ghost.exitTimer += ghostMoveDelay;
@@ -516,7 +550,7 @@ function moveGhosts() {
         // Exit spawn - move to exit position
         if (ghost.gridY > 11) {
           ghost.gridY--;
-          ghost.y = offsetY + ghost.gridY * tileSize;
+          ghost.targetY = offsetY + ghost.gridY * tileSize;
         } else {
           ghost.inSpawn = false;
         }
@@ -548,15 +582,33 @@ function moveGhosts() {
 
       if (!isWall(newX, newY)) {
         // Calculate distance to target
-        const dist = Math.abs(newX - target.x) + Math.abs(newY - target.y);
+        let dist = Math.abs(newX - target.x) + Math.abs(newY - target.y);
+
+        // Add penalty for overlapping with other ghosts to avoid clustering
+        ghosts.forEach((otherGhost, otherIndex) => {
+          if (otherIndex !== index && !otherGhost.inSpawn) {
+            if (otherGhost.gridX === newX && otherGhost.gridY === newY) {
+              dist += 100; // Heavy penalty for same position
+            } else if (Math.abs(otherGhost.gridX - newX) <= 1 && Math.abs(otherGhost.gridY - newY) <= 1) {
+              dist += 5; // Small penalty for being close
+            }
+          }
+        });
+
         possibleDirs.push({ dir, dist });
       }
     }
 
     if (possibleDirs.length > 0) {
-      // Sort by distance - pick closest to target
+      // Sort by distance - pick closest to target with penalties
       possibleDirs.sort((a, b) => a.dist - b.dist);
-      ghost.direction = possibleDirs[0].dir;
+
+      // Add some randomness for vulnerable ghosts to make them less predictable
+      if (ghost.vulnerable && possibleDirs.length > 1 && Math.random() < 0.3) {
+        ghost.direction = possibleDirs[Math.floor(Math.random() * Math.min(2, possibleDirs.length))].dir;
+      } else {
+        ghost.direction = possibleDirs[0].dir;
+      }
     }
 
     // Move ghost
@@ -567,8 +619,9 @@ function moveGhosts() {
     if (ghost.gridX < 0) ghost.gridX = mazeWidth - 1;
     if (ghost.gridX >= mazeWidth) ghost.gridX = 0;
 
-    ghost.x = offsetX + ghost.gridX * tileSize;
-    ghost.y = offsetY + ghost.gridY * tileSize;
+    ghost.targetX = offsetX + ghost.gridX * tileSize;
+    ghost.targetY = offsetY + ghost.gridY * tileSize;
+    ghost.lastDirection = { ...ghost.direction };
   });
 }
 
@@ -583,6 +636,15 @@ function checkGhostCollision() {
         if (score > highScore) {
           highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
         }
+
+        // Create particle explosion when eating ghost
+        createParticleExplosion(
+          ghost.x + tileSize / 2,
+          ghost.y + tileSize / 2,
+          ghost.color,
+          20
+        );
+
         // Send back to spawn
         const startPositions = [
           { x: 13, y: 11 },
@@ -595,6 +657,8 @@ function checkGhostCollision() {
         ghost.gridY = pos.y;
         ghost.x = offsetX + ghost.gridX * tileSize;
         ghost.y = offsetY + ghost.gridY * tileSize;
+        ghost.targetX = ghost.x;
+        ghost.targetY = ghost.y;
         ghost.vulnerable = false;
         ghost.inSpawn = ghost.name !== 'blinky';
         ghost.exitTimer = 0;
@@ -612,6 +676,8 @@ function checkGhostCollision() {
           pacman.gridY = 23;
           pacman.x = offsetX + 14 * tileSize;
           pacman.y = offsetY + 23 * tileSize;
+          pacman.targetX = pacman.x;
+          pacman.targetY = pacman.y;
 
           for (let j = 0; j < ghosts.length; j++) {
             const startPositions = [
@@ -625,6 +691,8 @@ function checkGhostCollision() {
             ghosts[j].gridY = pos.y;
             ghosts[j].x = offsetX + pos.x * tileSize;
             ghosts[j].y = offsetY + pos.y * tileSize;
+            ghosts[j].targetX = ghosts[j].x;
+            ghosts[j].targetY = ghosts[j].y;
             ghosts[j].inSpawn = ghosts[j].name !== 'blinky';
             ghosts[j].exitTimer = 0;
           }
@@ -667,20 +735,28 @@ function drawGame() {
     }
   });
 
-  // Draw power pellets
-  graphics.fillStyle(0xffb897, 1);
+  // Draw power pellets with pulsing neon effect
   powerPellets.forEach(pellet => {
     if (!pellet.eaten) {
-      graphics.fillCircle(
-        offsetX + pellet.x * tileSize + tileSize / 2,
-        offsetY + pellet.y * tileSize + tileSize / 2,
-        5
-      );
+      const px = offsetX + pellet.x * tileSize + tileSize / 2;
+      const py = offsetY + pellet.y * tileSize + tileSize / 2;
+      const pulse = Math.sin(glowTimer / 150) * 2 + 5;
+
+      // Outer glow
+      graphics.fillStyle(0xffb897, 0.3);
+      graphics.fillCircle(px, py, pulse + 2);
+
+      // Inner pellet
+      graphics.fillStyle(0xffb897, 1);
+      graphics.fillCircle(px, py, pulse);
     }
   });
 
   // Draw Pacman
   drawPacman();
+
+  // Draw particles
+  drawParticles();
 
   // Draw ghosts with visual offset to prevent overlap
   ghosts.forEach(ghost => {
@@ -727,7 +803,15 @@ function drawGame() {
 }
 
 function drawPacman() {
-  graphics.fillStyle(0xffff00, 1);
+  const centerX = pacman.x + tileSize / 2;
+  const centerY = pacman.y + tileSize / 2;
+
+  // Draw neon glow effect
+  const glowIntensity = Math.sin(glowTimer / 100) * 0.3 + 0.7;
+  graphics.fillStyle(0xffff00, 0.3);
+  graphics.fillCircle(centerX, centerY, tileSize / 2 + 2);
+
+  graphics.fillStyle(0xffff00, glowIntensity);
 
   if (mouthOpen) {
     // Draw Pacman with mouth open
@@ -736,8 +820,8 @@ function drawPacman() {
                        direction.y === -1 ? 1.75 : 0.75;
 
     graphics.slice(
-      pacman.x + tileSize / 2,
-      pacman.y + tileSize / 2,
+      centerX,
+      centerY,
       tileSize / 2 - 2,
       Phaser.Math.DegToRad(startAngle * 180),
       Phaser.Math.DegToRad((startAngle + 1.5) * 180),
@@ -746,11 +830,7 @@ function drawPacman() {
     graphics.fillPath();
   } else {
     // Draw Pacman with mouth closed (full circle)
-    graphics.fillCircle(
-      pacman.x + tileSize / 2,
-      pacman.y + tileSize / 2,
-      tileSize / 2 - 2
-    );
+    graphics.fillCircle(centerX, centerY, tileSize / 2 - 2);
   }
 }
 
@@ -767,6 +847,8 @@ function nextLevel() {
   pacman.gridY = 23;
   pacman.x = offsetX + 14 * tileSize;
   pacman.y = offsetY + 23 * tileSize;
+  pacman.targetX = pacman.x;
+  pacman.targetY = pacman.y;
 
   const startPositions = [
     { x: 13, y: 11 },
@@ -781,6 +863,8 @@ function nextLevel() {
     ghosts[i].gridY = pos.y;
     ghosts[i].x = offsetX + pos.x * tileSize;
     ghosts[i].y = offsetY + pos.y * tileSize;
+    ghosts[i].targetX = ghosts[i].x;
+    ghosts[i].targetY = ghosts[i].y;
     ghosts[i].inSpawn = true;
     ghosts[i].exitTimer = 0;
     ghosts[i].vulnerable = false;
@@ -924,23 +1008,23 @@ function playTone(scene, frequency, duration) {
 function startBgMusic(scene) {
   const ctx = scene.sound.context;
   const masterGain = ctx.createGain();
-  masterGain.gain.value = 0.08;
+  masterGain.gain.value = 0.06;
   masterGain.connect(ctx.destination);
 
-  // Pac-Man theme melody notes (simplified)
+  // Extended Pac-Man theme melody with bass
   const melody = [
-    { freq: 493.88, dur: 0.15 }, // B4
-    { freq: 587.33, dur: 0.15 }, // D5
-    { freq: 493.88, dur: 0.15 }, // B4
-    { freq: 392.00, dur: 0.15 }, // G4
-    { freq: 493.88, dur: 0.3 },  // B4
-    { freq: 392.00, dur: 0.3 },  // G4
-    { freq: 493.88, dur: 0.15 }, // B4
-    { freq: 587.33, dur: 0.15 }, // D5
-    { freq: 493.88, dur: 0.15 }, // B4
-    { freq: 392.00, dur: 0.15 }, // G4
-    { freq: 493.88, dur: 0.3 },  // B4
-    { freq: 392.00, dur: 0.3 }   // G4
+    { freq: 493.88, dur: 0.12 }, // B4
+    { freq: 587.33, dur: 0.12 }, // D5
+    { freq: 659.25, dur: 0.12 }, // E5
+    { freq: 587.33, dur: 0.12 }, // D5
+    { freq: 493.88, dur: 0.24 }, // B4
+    { freq: 392.00, dur: 0.24 }, // G4
+    { freq: 493.88, dur: 0.12 }, // B4
+    { freq: 587.33, dur: 0.12 }, // D5
+    { freq: 659.25, dur: 0.12 }, // E5
+    { freq: 587.33, dur: 0.12 }, // D5
+    { freq: 493.88, dur: 0.24 }, // B4
+    { freq: 392.00, dur: 0.24 }  // G4
   ];
 
   let noteIndex = 0;
@@ -955,20 +1039,30 @@ function startBgMusic(scene) {
     if (gameOver) return;
 
     const note = melody[noteIndex % melody.length];
+
+    // Main melody
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-
     osc.connect(gain);
     gain.connect(masterGain);
-
     osc.frequency.value = note.freq;
     osc.type = 'square';
-
-    gain.gain.setValueAtTime(0.3, startTime);
+    gain.gain.setValueAtTime(0.2, startTime);
     gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
-
     osc.start(startTime);
     osc.stop(startTime + note.dur);
+
+    // Bass line
+    const bass = ctx.createOscillator();
+    const bassGain = ctx.createGain();
+    bass.connect(bassGain);
+    bassGain.connect(masterGain);
+    bass.frequency.value = note.freq / 2;
+    bass.type = 'triangle';
+    bassGain.gain.setValueAtTime(0.15, startTime);
+    bassGain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
+    bass.start(startTime);
+    bass.stop(startTime + note.dur);
 
     startTime += note.dur;
     noteIndex++;
@@ -977,4 +1071,58 @@ function startBgMusic(scene) {
   }
 
   playNextNote();
+}
+
+function smoothMovement(entity, delta) {
+  const speed = 0.3;
+  const dx = entity.targetX - entity.x;
+  const dy = entity.targetY - entity.y;
+
+  if (Math.abs(dx) > 0.5) {
+    entity.x += dx * speed;
+  } else {
+    entity.x = entity.targetX;
+  }
+
+  if (Math.abs(dy) > 0.5) {
+    entity.y += dy * speed;
+  } else {
+    entity.y = entity.targetY;
+  }
+}
+
+function createParticleExplosion(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const speed = 2 + Math.random() * 3;
+    particles.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: color,
+      life: 1.0,
+      size: 2 + Math.random() * 2
+    });
+  }
+}
+
+function updateParticles(delta) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= delta / 1000;
+
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    graphics.fillStyle(p.color, p.life);
+    graphics.fillCircle(p.x, p.y, p.size * p.life);
+  });
 }
