@@ -112,15 +112,16 @@ let startText;
 let gameStarted = false;
 let gameOver = false;
 let gameWon = false;
+let levelComplete = false;
 let graphics;
 let sceneRef;
 let direction = { x: 0, y: 0 };
 let nextDirection = { x: 0, y: 0 };
 let moveTimer = 0;
-let moveDelay = 100;
+let moveDelay = 130;
 let ghostMoveTimer = 0;
-let ghostMoveDelay = 150;
-let vulnerableGhostDelay = 220;
+let ghostMoveDelay = 140;
+let vulnerableGhostDelay = 180;
 let powerMode = false;
 let powerTimer = 0;
 let powerDuration = 8000;
@@ -247,7 +248,12 @@ function create() {
       return;
     }
 
-    if (!gameStarted || gameOver || gameWon) return;
+    if (levelComplete && event.code === 'Space') {
+      continueToNextLevel();
+      return;
+    }
+
+    if (!gameStarted || gameOver || gameWon || levelComplete) return;
 
     if (event.code === 'ArrowUp') {
       nextDirection = { x: 0, y: -1 };
@@ -296,14 +302,15 @@ function initGame() {
 
   // Initialize ghosts (4 ghosts with different colors and behaviors)
   const ghostData = [
-    { color: 0xff0000, name: 'blinky', startX: 13, startY: 11, corner: { x: mazeWidth - 2, y: 0 } },
-    { color: 0xffb8ff, name: 'pinky', startX: 13, startY: 14, corner: { x: 2, y: 0 } },
-    { color: 0x00ffff, name: 'inky', startX: 12, startY: 14, corner: { x: mazeWidth - 2, y: mazeHeight - 2 } },
-    { color: 0xffb851, name: 'clyde', startX: 14, startY: 14, corner: { x: 2, y: mazeHeight - 2 } }
+    { color: 0xff0000, name: 'blinky', startX: 13, startY: 14, corner: { x: mazeWidth - 2, y: 0 } },
+    { color: 0xffb8ff, name: 'pinky', startX: 12, startY: 14, corner: { x: 2, y: 0 } },
+    { color: 0x00ffff, name: 'inky', startX: 14, startY: 14, corner: { x: mazeWidth - 2, y: mazeHeight - 2 } },
+    { color: 0xffb851, name: 'clyde', startX: 15, startY: 14, corner: { x: 2, y: mazeHeight - 2 } }
   ];
 
   for (let i = 0; i < 4; i++) {
     const data = ghostData[i];
+    const exitDelays = [0, 2000, 4000, 6000]; // Staggered ghost exits
     ghosts.push({
       gridX: data.startX,
       gridY: data.startY,
@@ -315,9 +322,9 @@ function initGame() {
       name: data.name,
       direction: { x: 0, y: -1 },
       vulnerable: false,
-      exitDelay: i * 3000,
+      exitDelay: exitDelays[i],
       exitTimer: 0,
-      inSpawn: true,
+      inSpawn: true, // All ghosts start inside spawn
       scatterTarget: data.corner,
       visualOffset: i * 0.25,
       lastDirection: { x: 0, y: -1 }
@@ -344,7 +351,7 @@ function update(_time, delta) {
   // Always draw the game
   drawGame();
 
-  if (!gameStarted || gameOver || gameWon) return;
+  if (!gameStarted || gameOver || gameWon || levelComplete) return;
 
   glowTimer += delta;
   animTimer += delta;
@@ -376,19 +383,16 @@ function update(_time, delta) {
     }
   }
 
-  // Smooth Pacman movement
-  smoothMovement(pacman, delta);
-
   // Move Pacman
   moveTimer += delta;
   if (moveTimer >= moveDelay) {
     moveTimer = 0;
 
-    // Try to change direction
+    // Try to change direction immediately
     const testX = pacman.gridX + nextDirection.x;
     const testY = pacman.gridY + nextDirection.y;
-    if (!isWall(testX, testY) && !isGhostSpawnCenter(testX, testY)) {
-      direction = nextDirection;
+    if ((nextDirection.x !== 0 || nextDirection.y !== 0) && !isWall(testX, testY) && !isGhostSpawnCenter(testX, testY)) {
+      direction = { ...nextDirection };
     }
 
     // Move in current direction
@@ -399,9 +403,15 @@ function update(_time, delta) {
       pacman.gridX = newX;
       pacman.gridY = newY;
 
-      // Wrap around
-      if (pacman.gridX < 0) pacman.gridX = mazeWidth - 1;
-      if (pacman.gridX >= mazeWidth) pacman.gridX = 0;
+      // Wrap around - snap position instantly to avoid weird transition
+      if (pacman.gridX < 0) {
+        pacman.gridX = mazeWidth - 1;
+        pacman.x = offsetX + pacman.gridX * tileSize;
+      }
+      if (pacman.gridX >= mazeWidth) {
+        pacman.gridX = 0;
+        pacman.x = offsetX + pacman.gridX * tileSize;
+      }
 
       pacman.targetX = offsetX + pacman.gridX * tileSize;
       pacman.targetY = offsetY + pacman.gridY * tileSize;
@@ -411,6 +421,12 @@ function update(_time, delta) {
     }
   }
 
+  // Smooth Pacman movement (after grid movement)
+  smoothMovement(pacman, delta);
+
+  // Smooth ghost movement (always smooth)
+  ghosts.forEach(g => smoothMovement(g, delta));
+
   // Move ghosts - use different delay for vulnerable ghosts
   ghostMoveTimer += delta;
   const currentDelay = powerMode ? vulnerableGhostDelay : ghostMoveDelay;
@@ -418,9 +434,6 @@ function update(_time, delta) {
     ghostMoveTimer = 0;
     moveGhosts();
   }
-
-  // Smooth ghost movement
-  ghosts.forEach(g => smoothMovement(g, delta));
 
   // Check ghost collision
   checkGhostCollision();
@@ -615,9 +628,15 @@ function moveGhosts() {
     ghost.gridX += ghost.direction.x;
     ghost.gridY += ghost.direction.y;
 
-    // Wrap around
-    if (ghost.gridX < 0) ghost.gridX = mazeWidth - 1;
-    if (ghost.gridX >= mazeWidth) ghost.gridX = 0;
+    // Wrap around - snap position instantly to avoid weird transition
+    if (ghost.gridX < 0) {
+      ghost.gridX = mazeWidth - 1;
+      ghost.x = offsetX + ghost.gridX * tileSize;
+    }
+    if (ghost.gridX >= mazeWidth) {
+      ghost.gridX = 0;
+      ghost.x = offsetX + ghost.gridX * tileSize;
+    }
 
     ghost.targetX = offsetX + ghost.gridX * tileSize;
     ghost.targetY = offsetY + ghost.gridY * tileSize;
@@ -647,10 +666,10 @@ function checkGhostCollision() {
 
         // Send back to spawn
         const startPositions = [
-          { x: 13, y: 11 },
           { x: 13, y: 14 },
           { x: 12, y: 14 },
-          { x: 14, y: 14 }
+          { x: 14, y: 14 },
+          { x: 15, y: 14 }
         ];
         const pos = startPositions[i];
         ghost.gridX = pos.x;
@@ -660,8 +679,9 @@ function checkGhostCollision() {
         ghost.targetX = ghost.x;
         ghost.targetY = ghost.y;
         ghost.vulnerable = false;
-        ghost.inSpawn = ghost.name !== 'blinky';
+        ghost.inSpawn = true;
         ghost.exitTimer = 0;
+        ghost.exitDelay = 5000; // 5 second respawn delay
         playTone(sceneRef, 1200, 0.15);
       } else {
         // Lose a life
@@ -681,11 +701,12 @@ function checkGhostCollision() {
 
           for (let j = 0; j < ghosts.length; j++) {
             const startPositions = [
-              { x: 13, y: 11 },
               { x: 13, y: 14 },
               { x: 12, y: 14 },
-              { x: 14, y: 14 }
+              { x: 14, y: 14 },
+              { x: 15, y: 14 }
             ];
+            const exitDelays = [0, 2000, 4000, 6000];
             const pos = startPositions[j];
             ghosts[j].gridX = pos.x;
             ghosts[j].gridY = pos.y;
@@ -693,8 +714,9 @@ function checkGhostCollision() {
             ghosts[j].y = offsetY + pos.y * tileSize;
             ghosts[j].targetX = ghosts[j].x;
             ghosts[j].targetY = ghosts[j].y;
-            ghosts[j].inSpawn = ghosts[j].name !== 'blinky';
+            ghosts[j].inSpawn = true;
             ghosts[j].exitTimer = 0;
+            ghosts[j].exitDelay = exitDelays[j];
           }
 
           direction = { x: 1, y: 0 };
@@ -834,9 +856,67 @@ function drawPacman() {
   }
 }
 
+// Store level complete UI elements to destroy them later
+let levelCompleteOverlay;
+let levelCompleteText;
+let levelScoreText;
+let levelContinueText;
+
 function nextLevel() {
+  levelComplete = true;
+  playTone(sceneRef, 880, 0.3);
+
+  levelCompleteOverlay = sceneRef.add.graphics();
+  levelCompleteOverlay.fillStyle(0x000000, 0.85);
+  levelCompleteOverlay.fillRect(0, 0, 800, 600);
+
+  levelCompleteText = sceneRef.add.text(400, 250, 'LEVEL ' + level + ' COMPLETE!', {
+    fontSize: '48px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#00ff00',
+    stroke: '#000000',
+    strokeThickness: 6
+  }).setOrigin(0.5);
+
+  sceneRef.tweens.add({
+    targets: levelCompleteText,
+    scale: { from: 0.8, to: 1.1 },
+    duration: 800,
+    yoyo: true,
+    repeat: -1
+  });
+
+  levelScoreText = sceneRef.add.text(400, 330, 'SCORE: ' + score, {
+    fontSize: '28px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffff00'
+  }).setOrigin(0.5);
+
+  levelContinueText = sceneRef.add.text(400, 380, 'PRESS SPACE TO CONTINUE', {
+    fontSize: '24px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffffff'
+  }).setOrigin(0.5);
+
+  sceneRef.tweens.add({
+    targets: levelContinueText,
+    alpha: { from: 1, to: 0.3 },
+    duration: 600,
+    yoyo: true,
+    repeat: -1
+  });
+}
+
+function continueToNextLevel() {
+  // Destroy level complete UI elements
+  if (levelCompleteOverlay) levelCompleteOverlay.destroy();
+  if (levelCompleteText) levelCompleteText.destroy();
+  if (levelScoreText) levelScoreText.destroy();
+  if (levelContinueText) levelContinueText.destroy();
+
   level++;
   levelText.setText('LEVEL: ' + level);
+  levelComplete = false;
 
   // Reset pellets
   pellets.forEach(p => p.eaten = false);
@@ -851,11 +931,12 @@ function nextLevel() {
   pacman.targetY = pacman.y;
 
   const startPositions = [
-    { x: 13, y: 11 },
     { x: 13, y: 14 },
     { x: 12, y: 14 },
-    { x: 14, y: 14 }
+    { x: 14, y: 14 },
+    { x: 15, y: 14 }
   ];
+  const exitDelays = [0, 2000, 4000, 6000];
 
   for (let i = 0; i < ghosts.length; i++) {
     const pos = startPositions[i];
@@ -867,6 +948,7 @@ function nextLevel() {
     ghosts[i].targetY = ghosts[i].y;
     ghosts[i].inSpawn = true;
     ghosts[i].exitTimer = 0;
+    ghosts[i].exitDelay = exitDelays[i];
     ghosts[i].vulnerable = false;
   }
 
@@ -880,8 +962,6 @@ function nextLevel() {
 
   // Increase difficulty
   if (ghostMoveDelay > 80) ghostMoveDelay -= 10;
-
-  playTone(sceneRef, 880, 0.2);
 }
 
 function endGame() {
@@ -974,9 +1054,10 @@ function restartGame() {
   gameOver = false;
   gameWon = false;
   gameStarted = false;
+  levelComplete = false;
   moveTimer = 0;
   ghostMoveTimer = 0;
-  ghostMoveDelay = 180;
+  ghostMoveDelay = 140;
   animTimer = 0;
 
   scoreText.setText('SCORE: 0');
@@ -1074,17 +1155,17 @@ function startBgMusic(scene) {
 }
 
 function smoothMovement(entity, delta) {
-  const speed = 0.3;
+  const speed = 0.25;
   const dx = entity.targetX - entity.x;
   const dy = entity.targetY - entity.y;
 
-  if (Math.abs(dx) > 0.5) {
+  if (Math.abs(dx) > 0.1) {
     entity.x += dx * speed;
   } else {
     entity.x = entity.targetX;
   }
 
-  if (Math.abs(dy) > 0.5) {
+  if (Math.abs(dy) > 0.1) {
     entity.y += dy * speed;
   } else {
     entity.y = entity.targetY;
