@@ -213,18 +213,22 @@ function create() {
     align: 'center'
   }).setOrigin(0.5);
 
-  // Start instructions
+  // Start instructions with better contrast
   startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
     fontSize: '32px',
     fontFamily: 'Arial, sans-serif',
-    color: '#ffff00',
-    align: 'center'
+    color: '#ffffff',
+    align: 'center',
+    stroke: '#000000',
+    strokeThickness: 8,
+    backgroundColor: '#000000',
+    padding: { x: 20, y: 10 }
   }).setOrigin(0.5);
 
-  // Blinking animation
+  // Blinking animation with scale pulse for extra visibility
   this.tweens.add({
     targets: startText,
-    alpha: { from: 1, to: 0.3 },
+    scale: { from: 1, to: 1.05 },
     duration: 800,
     yoyo: true,
     repeat: -1
