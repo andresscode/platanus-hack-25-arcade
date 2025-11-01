@@ -110,6 +110,7 @@ let livesText;
 let levelText;
 let highScoreText;
 let startText;
+let startOverlay;
 let comboText;
 let gameStarted = false;
 let gameOver = false;
@@ -292,6 +293,11 @@ function create() {
     fontStyle: 'bold'
   }).setOrigin(0.5);
 
+  // Add transparent overlay for start text (similar to level complete/game over)
+  startOverlay = this.add.graphics();
+  startOverlay.fillStyle(0x000000, 0.75);
+  startOverlay.fillRect(0, 0, 800, 600);
+
   // Start instructions with retro arcade style
   startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
     fontSize: '28px',
@@ -428,6 +434,7 @@ function initGame() {
 function startGame() {
   gameStarted = true;
   if (startText) startText.destroy();
+  if (startOverlay) startOverlay.destroy();
   livesAtLevelStart = lives;
 
   // Show "READY!" message with retro styling
@@ -1087,28 +1094,106 @@ function drawGame() {
   specialPowerups.forEach(powerup => {
     const px = offsetX + powerup.gridX * tileSize + tileSize / 2 + shakeX;
     const py = offsetY + powerup.gridY * tileSize + tileSize / 2 + shakeY;
-    const pulse = Math.sin(glowTimer / 100) * 3 + 7;
+    const pulse = Math.sin(glowTimer / 100) * 0.15 + 1;
+    const rotation = (glowTimer / 20) % 360;
 
     if (powerup.type === 'freeze') {
-      // Ice blue powerup with snowflake shape
+      // Ice/snowflake shape with 6 points
+      const size = 8 * pulse;
+      graphics.lineStyle(2, 0xaaffff, 1);
+
+      // Outer glow
       graphics.fillStyle(0x00ffff, 0.3);
-      graphics.fillCircle(px, py, pulse + 3);
-      graphics.fillStyle(0xaaffff, 1);
-      graphics.fillCircle(px, py, pulse);
+      graphics.fillCircle(px, py, size + 4);
+
+      // Draw 6 lines for snowflake (3 lines crossing at center)
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 60 + rotation) * Math.PI / 180;
+        const x1 = px + Math.cos(angle) * size;
+        const y1 = py + Math.sin(angle) * size;
+        const x2 = px - Math.cos(angle) * size;
+        const y2 = py - Math.sin(angle) * size;
+
+        graphics.beginPath();
+        graphics.moveTo(x1, y1);
+        graphics.lineTo(x2, y2);
+        graphics.strokePath();
+      }
+
+      // Center dot
+      graphics.fillStyle(0xffffff, 1);
+      graphics.fillCircle(px, py, 2);
+
     } else if (powerup.type === 'multiplier') {
-      // Gold powerup with star effect
-      graphics.fillStyle(0xffd700, 0.3);
-      graphics.fillCircle(px, py, pulse + 3);
+      // Thunder/lightning bolt shape
+      const size = 10 * pulse;
+
+      // Outer glow
+      graphics.fillStyle(0xffd700, 0.4);
+      graphics.fillCircle(px, py, size + 3);
+
+      // Draw lightning bolt using triangles
       graphics.fillStyle(0xffff00, 1);
-      graphics.fillCircle(px, py, pulse);
+      graphics.beginPath();
+      graphics.moveTo(px, py - size);
+      graphics.lineTo(px - size * 0.3, py - size * 0.2);
+      graphics.lineTo(px + size * 0.2, py - size * 0.2);
+      graphics.lineTo(px - size * 0.5, py + size * 0.4);
+      graphics.lineTo(px, py + size * 0.1);
+      graphics.lineTo(px + size * 0.5, py + size);
+      graphics.lineTo(px + size * 0.1, py + size * 0.3);
+      graphics.lineTo(px + size * 0.4, py);
+      graphics.lineTo(px, py - size);
+      graphics.closePath();
+      graphics.fillPath();
+
+      // Inner highlight
+      graphics.fillStyle(0xffffff, 0.6);
+      graphics.fillRect(px - 1, py - size * 0.5, 2, size * 0.4);
+
     } else if (powerup.type === 'flame') {
-      // Red/orange flame powerup with fire effect
+      // Flame shape with pointed top
+      const size = 9 * pulse;
+      const flicker = Math.sin(glowTimer / 30) * 0.2 + 0.8;
+
+      // Outer glow
       graphics.fillStyle(0xff4500, 0.4);
-      graphics.fillCircle(px, py, pulse + 3);
-      graphics.fillStyle(0xff6600, 1);
-      graphics.fillCircle(px, py, pulse);
-      graphics.fillStyle(0xffaa00, 0.7);
-      graphics.fillCircle(px, py, pulse * 0.6);
+      graphics.fillCircle(px, py, size + 4);
+
+      // Outer flame (orange)
+      graphics.fillStyle(0xff6600, flicker);
+      graphics.beginPath();
+      graphics.moveTo(px, py - size);
+      graphics.lineTo(px - size * 0.6, py + size * 0.6);
+      graphics.lineTo(px - size * 0.3, py + size * 0.3);
+      graphics.lineTo(px, py + size * 0.7);
+      graphics.lineTo(px + size * 0.3, py + size * 0.3);
+      graphics.lineTo(px + size * 0.6, py + size * 0.6);
+      graphics.lineTo(px, py - size);
+      graphics.closePath();
+      graphics.fillPath();
+
+      // Middle flame (yellow-orange)
+      graphics.fillStyle(0xffaa00, 1);
+      graphics.beginPath();
+      graphics.moveTo(px, py - size * 0.7);
+      graphics.lineTo(px - size * 0.4, py + size * 0.4);
+      graphics.lineTo(px, py + size * 0.5);
+      graphics.lineTo(px + size * 0.4, py + size * 0.4);
+      graphics.lineTo(px, py - size * 0.7);
+      graphics.closePath();
+      graphics.fillPath();
+
+      // Inner flame (bright yellow)
+      graphics.fillStyle(0xffff00, flicker);
+      graphics.beginPath();
+      graphics.moveTo(px, py - size * 0.4);
+      graphics.lineTo(px - size * 0.2, py + size * 0.2);
+      graphics.lineTo(px, py + size * 0.3);
+      graphics.lineTo(px + size * 0.2, py + size * 0.2);
+      graphics.lineTo(px, py - size * 0.4);
+      graphics.closePath();
+      graphics.fillPath();
     }
   });
 
@@ -1128,8 +1213,6 @@ function drawGame() {
 
   if (scoreMultiplier > 1) {
     const multText = 'x' + scoreMultiplier + ' SCORE: ' + Math.ceil((multiplierDuration - multiplierTimer) / 1000) + 's';
-    graphics.fillStyle(0xffd700, 0.3);
-    graphics.fillRect(10, 60, 160, 25);
     const mt = sceneRef.add.text(90, 72, multText, {
       fontSize: '14px',
       fontFamily: 'Courier New, monospace',
@@ -1766,7 +1849,7 @@ function checkBananaCollision() {
   // Check both tiles since banana is 2 tiles wide
   if (banana && ((banana.gridX === pacman.gridX || banana.gridX + 1 === pacman.gridX) && banana.gridY === pacman.gridY)) {
     // Eat banana - most valuable item in the game!
-    const points = 1000;
+    const points = 500;
     score += points;
     scoreText.setText('SCORE: ' + score);
     if (score > highScore) {
@@ -1911,9 +1994,13 @@ function updateFlames(delta) {
     flame.y += flame.vy;
     flame.life -= delta / 1000;
 
-    // Check collision with ghosts
+    // Check collision with ghosts (only those NOT in spawn area)
     for (let g = 0; g < ghosts.length; g++) {
       const ghost = ghosts[g];
+
+      // Skip ghosts that are in the spawn area
+      if (ghost.inSpawn) continue;
+
       const ghostCenterX = ghost.x + tileSize / 2;
       const ghostCenterY = ghost.y + tileSize / 2;
       const dist = Math.sqrt(Math.pow(flame.x - ghostCenterX, 2) + Math.pow(flame.y - ghostCenterY, 2));
