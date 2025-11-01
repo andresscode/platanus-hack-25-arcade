@@ -80,6 +80,7 @@ const config = {
   height: 600,
   backgroundColor: '#000000',
   scene: {
+    preload: preload,
     create: create,
     update: update
   }
@@ -177,6 +178,11 @@ const mazeLayout = [
   [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
+
+function preload() {
+  // Load banana image from base64
+  this.load.image('banana', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAADsAAAA7AF5KHG9AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAA+1JREFUWIXtlVuIVVUYx3/f2nufvfeZM5fjJI4zRoYioWEJhtpDSGnihaiXiEAQ9MmHKKggepmXbkZEUElQD/WS6KMzag/iPGhpaFAZBRE2kE7e5nLmXPY5e+/19XA845zTeElzXvQPG9Za3/f9///1rcVecA93O5zpk/7+fnftkiXB0KlT8WwZMI3BO69tOxyODhdDPy6+tWvrttky4E6NPF2lCX7BtWVvefLIbBmY6kBlVXK6uKXKVwtGx5Osbpp1A2k+naee0uZqGMXJ/e8ee+aJWTPw6ZHN64CFAL5numxpLFzK3/tmw4Do3mWZC+3l42ecrhXVzio/nTMs9GLWPzCMlNyv/dXFF++ogWiw9yVFPwIw3UUkjElHunDum0QyMWk5+2qwevyDO2XAKLq1MdGyjxiLaYtIL+dABSdbeb92tHPH/ymqhzrmnPhyxRoAqQzOLwNhI+j0jSFGSc/mwU9w5hbAilIO3vDWTLx3O8K1Y12P4iQfS5isKYx2jA0dW/nDvwxIe4STL2FLPvZyDmmLcLpLoGDL/oGMO/msrOSm/5R6BDfxOl+xQbLTZJKFiKIVj/RSO6j8boA/mgomA0gcTFsVk62hpYD0QgeqBtNW3RRLOBZ/1/nmdUX3kql82769djx3NO4KIjoru4wf18UnA9KLHaCCwkGJBuZ/qMLLTQyZBHdeAaAuXnXBtZh8CRPW6jmpSTR2ftVEfrHinHHE9iH6oIpdLBnbI8ZKk6maix3LolWvsZQa0eVSPdSzzKbyIy0Pk+QinDklNDXYS7mpQvFjpCPCBDGI3qD/oDUPLfrYkt8Sk93hlnM7BaAyOP9zYHtrveTq9wEEWwixhQD0ysZE693IpOCmiNGrorEDNbcunphWWoCTgWvXyobzJQEo71/QZ0z6s0K+NdNka0i+hDgWTQ1a8tFyBlKDpi3komAUcVPEteClyJWvMN7OyJleFs07/31U8zfkn/tzHGDqnKLB3vWKHmD6C9ngNRaZU8aE1WkV1C+SSlPeTLBFn3Qiy9mL3ZcX94wskvVjE1M10xOjgZ6dKvLJjCwAborJRUiudk2xKcQOtpLBFgNoHIPKjnDLuS+aNtdaVxno3Y6wG9RrjTXBS5FMjLgKoogomjiQGmzNvSp6VembYOPIRhG0eXkGVA72PSXW7pvpTtwa5EQg0dOyabTQGpnxioYbzx5OE/dhRPfcprIFPgssT84kDtfowHREA73rVPRt4LH/IKwgQxZ9vW3zyMnrJd7QQAPV/b0PWcMLoI8DS4G+ZkGGgd9UZUhE94SbR4ZvhvemDbRCj8zNTZRCD6CzbCN5/q/KrXLdw92NfwC57adrhk6N8AAAAABJRU5ErkJggg==')
+}
 
 function create() {
   sceneRef = this;
@@ -389,6 +395,7 @@ function update(_time, delta) {
   if (banana) {
     banana.lifetime += delta;
     if (banana.lifetime >= bananaLifetime) {
+      banana.sprite.destroy();
       banana = null;
     }
   }
@@ -818,11 +825,6 @@ function drawGame() {
       graphics.fillCircle(px, py, pulse);
     }
   });
-
-  // Draw banana
-  if (banana) {
-    drawBanana();
-  }
 
   // Draw Pacman
   drawPacman();
@@ -1298,15 +1300,25 @@ function updateFloatingTexts(delta) {
 
 function spawnBanana() {
   // Spawn in the corridor below the ghost spawn (y = 17, center x)
+  const x = offsetX + 13 * tileSize;
+  const y = offsetY + 17 * tileSize;
+
+  // Create banana sprite from base64 image
+  const bananaSprite = sceneRef.add.image(x + tileSize, y + tileSize / 2, 'banana').setScale(0.7);
+
   banana = {
     gridX: 13,
     gridY: 17,
-    lifetime: 0
+    lifetime: 0,
+    sprite: bananaSprite,
+    x: x,
+    y: y
   };
 }
 
 function checkBananaCollision() {
-  if (banana && banana.gridX === pacman.gridX && banana.gridY === pacman.gridY) {
+  // Check both tiles since banana is 2 tiles wide
+  if (banana && ((banana.gridX === pacman.gridX || banana.gridX + 1 === pacman.gridX) && banana.gridY === pacman.gridY)) {
     // Eat banana
     const points = 300;
     score += points;
@@ -1315,73 +1327,25 @@ function checkBananaCollision() {
       highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
     }
 
-    // Create particle explosion
+    // Create particle explosion at banana center
     createParticleExplosion(
-      offsetX + banana.gridX * tileSize + tileSize / 2,
+      offsetX + banana.gridX * tileSize + tileSize,
       offsetY + banana.gridY * tileSize + tileSize / 2,
       0xffe135,
       12
     );
 
-    // Create floating text
+    // Create floating text at banana center
     createFloatingText(
-      offsetX + banana.gridX * tileSize + tileSize / 2,
+      offsetX + banana.gridX * tileSize + tileSize,
       offsetY + banana.gridY * tileSize + tileSize / 2,
       '+' + points,
       0xffe135
     );
 
+    // Destroy sprite and clear banana
+    banana.sprite.destroy();
     banana = null;
     playTone(sceneRef, 1000, 0.1);
   }
-}
-
-function drawBanana() {
-  // Center banana across 2 tiles
-  const bx = offsetX + banana.gridX * tileSize;
-  const by = offsetY + banana.gridY * tileSize + tileSize / 2;
-
-  // Classic comic/pixel art banana - curved elongated shape
-  // Main banana body (bright yellow)
-  graphics.fillStyle(0xffed4e, 1);
-
-  // Draw curved banana using bezier-like path
-  graphics.beginPath();
-  graphics.moveTo(bx + 4, by - 3);
-  // Top curve
-  graphics.lineTo(bx + 8, by - 5);
-  graphics.lineTo(bx + 16, by - 6);
-  graphics.lineTo(bx + 24, by - 5);
-  graphics.lineTo(bx + 30, by - 2);
-  // Right tip
-  graphics.lineTo(bx + 32, by);
-  graphics.lineTo(bx + 30, by + 2);
-  // Bottom curve
-  graphics.lineTo(bx + 24, by + 4);
-  graphics.lineTo(bx + 16, by + 5);
-  graphics.lineTo(bx + 8, by + 4);
-  graphics.lineTo(bx + 4, by + 2);
-  // Left tip
-  graphics.lineTo(bx + 2, by);
-  graphics.closePath();
-  graphics.fillPath();
-
-  // Dark brown/green stem on left end
-  graphics.fillStyle(0x6b4423, 1);
-  graphics.fillRect(bx + 2, by - 2, 3, 4);
-
-  // Dark brown tip on right end
-  graphics.fillStyle(0x654321, 1);
-  graphics.fillCircle(bx + 31, by, 2);
-
-  // Brown spots (classic banana spots)
-  graphics.fillStyle(0x8b6914, 1);
-  graphics.fillCircle(bx + 10, by - 1, 1.5);
-  graphics.fillCircle(bx + 18, by + 1, 1.8);
-  graphics.fillCircle(bx + 25, by - 1, 1.3);
-  graphics.fillEllipse(bx + 14, by + 2, 2.5, 1.2);
-
-  // Highlight stripe down the middle (makes it look 3D)
-  graphics.fillStyle(0xfff68f, 0.5);
-  graphics.fillRect(bx + 8, by - 3, 20, 2);
 }
