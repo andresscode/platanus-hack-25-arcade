@@ -140,8 +140,6 @@ let glowTimer = 0;
 let floatingTexts = [];
 let ghostEatCombo = 0;
 let banana = null;
-let bananaTimer = 0;
-let bananaSpawnDelay = 10000; // Spawn banana after 10 seconds
 let bananaLifetime = 10000; // Banana stays for 10 seconds
 let bananaSpawnedThisLevel = false;
 
@@ -383,15 +381,19 @@ function update(_time, delta) {
   // Update floating texts
   updateFloatingTexts(delta);
 
-  // Update banana spawn/lifetime (only once per level)
-  if (!bananaSpawnedThisLevel) {
-    bananaTimer += delta;
-    if (!banana && bananaTimer >= bananaSpawnDelay) {
+  // Check if banana should spawn (40% of pellets eaten)
+  if (!bananaSpawnedThisLevel && !banana) {
+    const totalPellets = pellets.length;
+    const eatenPellets = pellets.filter(p => p.eaten).length;
+    const percentEaten = eatenPellets / totalPellets;
+
+    if (percentEaten >= 0.4) {
       spawnBanana();
-      bananaTimer = 0;
       bananaSpawnedThisLevel = true;
     }
   }
+
+  // Update banana lifetime
   if (banana) {
     banana.lifetime += delta;
     if (banana.lifetime >= bananaLifetime) {
@@ -832,6 +834,21 @@ function drawGame() {
   // Draw particles
   drawParticles();
 
+  // Draw banana with pulsing glow effect
+  if (banana && banana.sprite) {
+    const pulse = Math.sin(glowTimer / 150) * 0.15 + 1;
+    banana.sprite.setScale(0.7 * pulse);
+
+    // Add glowing aura using graphics
+    const glowAlpha = (Math.sin(glowTimer / 150) * 0.3 + 0.5);
+    graphics.fillStyle(0xffe135, glowAlpha * 0.4);
+    graphics.fillCircle(
+      banana.sprite.x,
+      banana.sprite.y,
+      20 * pulse
+    );
+  }
+
   // Draw ghosts with visual offset to prevent overlap
   ghosts.forEach(ghost => {
     const offsetAdjust = Math.sin(Date.now() / 1000 + ghost.visualOffset * Math.PI * 2) * 2;
@@ -970,8 +987,8 @@ function continueToNextLevel() {
   powerPellets.forEach(p => p.eaten = false);
 
   // Reset banana for new level
+  if (banana && banana.sprite) banana.sprite.destroy();
   banana = null;
-  bananaTimer = 0;
   bananaSpawnedThisLevel = false;
 
   // Reset positions
@@ -1327,21 +1344,16 @@ function checkBananaCollision() {
       highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
     }
 
-    // Create particle explosion at banana center
-    createParticleExplosion(
-      offsetX + banana.gridX * tileSize + tileSize,
-      offsetY + banana.gridY * tileSize + tileSize / 2,
-      0xffe135,
-      12
-    );
+    const centerX = banana.sprite.x;
+    const centerY = banana.sprite.y;
+
+    // Create multiple particle explosions with different colors for a vibrant effect
+    createParticleExplosion(centerX, centerY, 0xffe135, 20); // Yellow
+    createParticleExplosion(centerX, centerY, 0xffff00, 15); // Bright yellow
+    createParticleExplosion(centerX, centerY, 0xffd700, 12); // Gold
 
     // Create floating text at banana center
-    createFloatingText(
-      offsetX + banana.gridX * tileSize + tileSize,
-      offsetY + banana.gridY * tileSize + tileSize / 2,
-      '+' + points,
-      0xffe135
-    );
+    createFloatingText(centerX, centerY, '+' + points, 0xffe135);
 
     // Destroy sprite and clear banana
     banana.sprite.destroy();
