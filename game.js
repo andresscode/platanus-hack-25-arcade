@@ -145,9 +145,6 @@ let bananaLifetime = 10000; // Banana stays for 10 seconds
 let bananaSpawnedThisLevel = false;
 let screenFlash = 0;
 let pelletsEatenThisLevel = 0;
-let eatCombo = 0;
-let lastEatTime = 0;
-let comboDecayTime = 1000;
 let pacmanTrail = [];
 let cameraShake = { x: 0, y: 0, intensity: 0 };
 let readyText = null;
@@ -161,6 +158,7 @@ let freezeDuration = 5000;
 let scoreMultiplier = 1;
 let multiplierTimer = 0;
 let multiplierDuration = 10000;
+let flames = []; // Array of flame projectiles
 
 // Maze layouts array - add more layouts here (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 // The game will cycle through layouts based on level
@@ -272,13 +270,6 @@ function create() {
     fontStyle: 'bold'
   });
 
-  // Combo display (below score) with retro styling
-  comboText = this.add.text(16, 40, '', {
-    fontSize: '16px',
-    fontFamily: 'Courier New, monospace',
-    color: '#ffff00',
-    fontStyle: 'bold'
-  });
 
   // Lives display - using Pacman sprites instead of text
   // Will be drawn in drawGame() function
@@ -485,45 +476,6 @@ function update(_time, delta) {
     if (screenFlash < 0) screenFlash = 0;
   }
 
-  // Combo decay system
-  if (Date.now() - lastEatTime > comboDecayTime && eatCombo > 0) {
-    // Animate combo text disappearing
-    sceneRef.tweens.add({
-      targets: comboText,
-      scale: { from: 1, to: 0 },
-      alpha: { from: 1, to: 0 },
-      duration: 300,
-      ease: 'Power2',
-      onComplete: () => {
-        comboText.setText('');
-        comboText.setScale(1);
-        comboText.setAlpha(1);
-      }
-    });
-    eatCombo = 0;
-  }
-
-  // Update combo text display
-  if (eatCombo > 1) {
-    const comboColor = eatCombo > 10 ? '#ff0000' : eatCombo > 5 ? '#ff8800' : '#ffff00';
-    const prevText = comboText.text;
-    const newText = 'COMBO x' + eatCombo;
-    comboText.setColor(comboColor);
-    comboText.setText(newText);
-
-    // Animate when combo increases
-    if (prevText !== newText && newText !== '') {
-      sceneRef.tweens.add({
-        targets: comboText,
-        scale: { from: 1.3, to: 1 },
-        duration: 200,
-        ease: 'Back.out'
-      });
-    }
-  } else if (eatCombo === 0 && comboText.text !== '') {
-    comboText.setText('');
-  }
-
   // Update Pacman trail
   updatePacmanTrail();
 
@@ -541,6 +493,9 @@ function update(_time, delta) {
   // Update floating texts
   updateFloatingTexts(delta);
 
+  // Update flames
+  updateFlames(delta);
+
   // Check if banana should spawn (40% of pellets eaten)
   if (!bananaSpawnedThisLevel && !banana) {
     const totalPellets = pellets.length;
@@ -553,8 +508,8 @@ function update(_time, delta) {
     }
   }
 
-  // Spawn special powerups randomly when 20% and 60% pellets eaten
-  if (specialPowerups.length === 0) {
+  // Spawn special powerups randomly when 20%, 60%, and 80% pellets eaten - only one at a time
+  if (specialPowerups.length === 0 && !banana) {
     const totalPellets = pellets.length;
     const eatenPellets = pellets.filter(p => p.eaten).length;
     const percentEaten = eatenPellets / totalPellets;
@@ -563,6 +518,8 @@ function update(_time, delta) {
       spawnSpecialPowerup('freeze');
     } else if (percentEaten >= 0.6 && percentEaten < 0.65) {
       spawnSpecialPowerup('multiplier');
+    } else if (percentEaten >= 0.8 && percentEaten < 0.85) {
+      spawnSpecialPowerup('flame');
     }
   }
 
@@ -707,18 +664,7 @@ function checkPelletCollision() {
       pellet.eaten = true;
       pelletsEatenThisLevel++;
 
-      // Combo system - eat pellets quickly for bonus points
-      const now = Date.now();
-      if (now - lastEatTime < comboDecayTime) {
-        eatCombo++;
-      } else {
-        eatCombo = 1;
-      }
-      lastEatTime = now;
-
-      const basePoints = 10;
-      const comboBonus = eatCombo > 1 ? (eatCombo - 1) * 5 : 0;
-      const points = Math.floor((basePoints + comboBonus) * scoreMultiplier);
+      const points = Math.floor(10 * scoreMultiplier);
 
       score += points;
       scoreText.setText('SCORE: ' + score);
@@ -760,7 +706,7 @@ function checkPelletCollision() {
         createFloatingText(textX, textY, 'SPEED UP!', 0x00ffff);
       }
 
-      playTone(sceneRef, 880 + (eatCombo * 20), 0.05);
+      playTone(sceneRef, 880, 0.05);
     }
   }
 
@@ -942,7 +888,7 @@ function checkGhostCollision() {
   for (let i = 0; i < ghosts.length; i++) {
     const ghost = ghosts[i];
     if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
-      if (ghost.vulnerable) {
+      if (ghost.vulnerable || freezeMode) {
         // Eat ghost - combo scoring
         ghostEatCombo++;
         const points = 200 * ghostEatCombo;
@@ -1119,6 +1065,9 @@ function drawGame() {
   // Draw particles
   drawParticles();
 
+  // Draw flames
+  drawFlames();
+
   // Draw banana with pulsing glow effect
   if (banana && banana.sprite) {
     const pulse = Math.sin(glowTimer / 150) * 0.15 + 1;
@@ -1152,6 +1101,14 @@ function drawGame() {
       graphics.fillCircle(px, py, pulse + 3);
       graphics.fillStyle(0xffff00, 1);
       graphics.fillCircle(px, py, pulse);
+    } else if (powerup.type === 'flame') {
+      // Red/orange flame powerup with fire effect
+      graphics.fillStyle(0xff4500, 0.4);
+      graphics.fillCircle(px, py, pulse + 3);
+      graphics.fillStyle(0xff6600, 1);
+      graphics.fillCircle(px, py, pulse);
+      graphics.fillStyle(0xffaa00, 0.7);
+      graphics.fillCircle(px, py, pulse * 0.6);
     }
   });
 
@@ -1239,10 +1196,10 @@ function drawPacman() {
   const centerX = pacman.x + tileSize / 2 + cameraShake.x;
   const centerY = pacman.y + tileSize / 2 + cameraShake.y;
 
-  // Glow effect when in power mode or high combo
-  if (powerMode || eatCombo > 5) {
+  // Glow effect when in power mode
+  if (powerMode) {
     const glowSize = (tileSize / 2 + 3) + Math.sin(glowTimer / 100) * 2;
-    const glowColor = powerMode ? 0x00ffff : 0xffaa00;
+    const glowColor = 0x00ffff;
     graphics.fillStyle(glowColor, 0.3);
     graphics.fillCircle(centerX, centerY, glowSize);
   }
@@ -1404,6 +1361,7 @@ function continueToNextLevel() {
   freezeTimer = 0;
   scoreMultiplier = 1;
   multiplierTimer = 0;
+  flames = [];
 
   // Reset positions
   pacman.gridX = 14;
@@ -1706,6 +1664,24 @@ function drawParticles() {
   });
 }
 
+function drawFlames() {
+  flames.forEach(f => {
+    const pulse = Math.sin(Date.now() / 50) * 0.3 + 0.7;
+
+    // Outer glow
+    graphics.fillStyle(0xff4500, f.life * 0.4);
+    graphics.fillCircle(f.x, f.y, f.size * 1.5);
+
+    // Inner flame
+    graphics.fillStyle(0xffa500, f.life * pulse);
+    graphics.fillCircle(f.x, f.y, f.size);
+
+    // Core
+    graphics.fillStyle(0xffff00, f.life);
+    graphics.fillCircle(f.x, f.y, f.size * 0.5);
+  });
+}
+
 function createFloatingText(x, y, text, color) {
   const textObj = sceneRef.add.text(x, y, text, {
     fontSize: '22px',
@@ -1789,8 +1765,8 @@ function spawnBanana() {
 function checkBananaCollision() {
   // Check both tiles since banana is 2 tiles wide
   if (banana && ((banana.gridX === pacman.gridX || banana.gridX + 1 === pacman.gridX) && banana.gridY === pacman.gridY)) {
-    // Eat banana
-    const points = 300;
+    // Eat banana - most valuable item in the game!
+    const points = 1000;
     score += points;
     scoreText.setText('SCORE: ' + score);
     if (score > highScore) {
@@ -1800,18 +1776,48 @@ function checkBananaCollision() {
     const centerX = banana.sprite.x;
     const centerY = banana.sprite.y;
 
-    // Create multiple particle explosions with different colors for a vibrant effect
-    createParticleExplosion(centerX, centerY, 0xffe135, 20); // Yellow
-    createParticleExplosion(centerX, centerY, 0xffff00, 15); // Bright yellow
-    createParticleExplosion(centerX, centerY, 0xffd700, 12); // Gold
+    // MASSIVE particle explosions with different colors for an epic effect
+    createParticleExplosion(centerX, centerY, 0xffe135, 40); // Yellow
+    createParticleExplosion(centerX, centerY, 0xffff00, 35); // Bright yellow
+    createParticleExplosion(centerX, centerY, 0xffd700, 30); // Gold
+    createParticleExplosion(centerX, centerY, 0xffaa00, 25); // Orange
 
-    // Create floating text at banana center
-    createFloatingText(centerX, centerY, '+' + points, 0xffe135);
+    // Intense screen flash
+    screenFlash = 15;
+
+    // Big camera shake
+    cameraShake.intensity = 20;
+
+    // Create large floating text at banana center with bigger font
+    const bananaText = sceneRef.add.text(centerX, centerY, '+' + points, {
+      fontSize: '40px',
+      fontFamily: 'Courier New, monospace',
+      color: '#ffe135',
+      stroke: '#000000',
+      strokeThickness: 6,
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    floatingTexts.push({
+      textObj: bananaText,
+      life: 2.5,
+      startY: centerY,
+      velocity: -80
+    });
+
+    // Secondary text
+    setTimeout(() => {
+      createFloatingText(centerX, centerY - 30, 'JACKPOT!', 0xffd700);
+    }, 200);
 
     // Destroy sprite and clear banana
     banana.sprite.destroy();
     banana = null;
-    playTone(sceneRef, 1000, 0.1);
+
+    // Epic sound - play multiple tones
+    playTone(sceneRef, 800, 0.15);
+    setTimeout(() => playTone(sceneRef, 1000, 0.15), 80);
+    setTimeout(() => playTone(sceneRef, 1200, 0.2), 160);
   }
 }
 
@@ -1865,9 +1871,93 @@ function checkSpecialPowerupCollision() {
         createParticleExplosion(px, py, 0xffd700, 20);
         createFloatingText(px, py, '2x SCORE!', 0xffd700);
         playTone(sceneRef, 1100, 0.2);
+      } else if (powerup.type === 'flame') {
+        // Create circular flame pattern
+        createFlameCircle(pacman.x + tileSize / 2, pacman.y + tileSize / 2);
+
+        createParticleExplosion(px, py, 0xff4500, 20);
+        createFloatingText(px, py, 'FLAMES!', 0xff4500);
+        playTone(sceneRef, 800, 0.2);
       }
 
       specialPowerups.splice(i, 1);
+    }
+  }
+}
+
+function createFlameCircle(centerX, centerY) {
+  // Create 16 flame projectiles in a circular pattern
+  const numFlames = 16;
+  for (let i = 0; i < numFlames; i++) {
+    const angle = (Math.PI * 2 * i) / numFlames;
+    const speed = 3;
+    flames.push({
+      x: centerX,
+      y: centerY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1.5,
+      size: 6
+    });
+  }
+}
+
+function updateFlames(delta) {
+  for (let i = flames.length - 1; i >= 0; i--) {
+    const flame = flames[i];
+
+    // Move flame
+    flame.x += flame.vx;
+    flame.y += flame.vy;
+    flame.life -= delta / 1000;
+
+    // Check collision with ghosts
+    for (let g = 0; g < ghosts.length; g++) {
+      const ghost = ghosts[g];
+      const ghostCenterX = ghost.x + tileSize / 2;
+      const ghostCenterY = ghost.y + tileSize / 2;
+      const dist = Math.sqrt(Math.pow(flame.x - ghostCenterX, 2) + Math.pow(flame.y - ghostCenterY, 2));
+
+      if (dist < tileSize / 2 + flame.size) {
+        // Hit ghost - send back to spawn
+        createParticleExplosion(ghostCenterX, ghostCenterY, ghost.color, 20);
+        createFloatingText(ghostCenterX, ghostCenterY, '+300', 0xff4500);
+
+        score += 300;
+        scoreText.setText('SCORE: ' + score);
+        if (score > highScore) {
+          highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+        }
+
+        const startPositions = [
+          { x: 13, y: 14 },
+          { x: 12, y: 14 },
+          { x: 14, y: 14 },
+          { x: 15, y: 14 }
+        ];
+        const pos = startPositions[g];
+        ghost.gridX = pos.x;
+        ghost.gridY = pos.y;
+        ghost.x = offsetX + ghost.gridX * tileSize;
+        ghost.y = offsetY + ghost.gridY * tileSize;
+        ghost.targetX = ghost.x;
+        ghost.targetY = ghost.y;
+        ghost.vulnerable = false;
+        ghost.inSpawn = true;
+        ghost.exitTimer = 0;
+        ghost.exitDelay = 5000;
+
+        playTone(sceneRef, 1500, 0.1);
+
+        // Remove the flame
+        flames.splice(i, 1);
+        break;
+      }
+    }
+
+    // Remove if life expired
+    if (flame.life <= 0) {
+      flames.splice(i, 1);
     }
   }
 }
