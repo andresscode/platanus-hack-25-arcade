@@ -160,6 +160,8 @@ let scoreMultiplier = 1;
 let multiplierTimer = 0;
 let multiplierDuration = 10000;
 let flames = []; // Array of flame projectiles
+let thunderbolts = []; // Array of lightning bolts
+let powerupsSpawnedThisLevel = []; // Track which powerups have been spawned
 
 // Maze layouts array - add more layouts here (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 // The game will cycle through layouts based on level
@@ -240,8 +242,11 @@ function getCurrentLayout() {
 }
 
 function preload() {
-  // Load banana image from base64
-  this.load.image('banana', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAADsAAAA7AF5KHG9AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAA+1JREFUWIXtlVuIVVUYx3/f2nufvfeZM5fjJI4zRoYioWEJhtpDSGnihaiXiEAQ9MmHKKggepmXbkZEUElQD/WS6KMzag/iPGhpaFAZBRE2kE7e5nLmXPY5e+/19XA845zTeElzXvQPG9Za3/f9///1rcVecA93O5zpk/7+fnftkiXB0KlT8WwZMI3BO69tOxyODhdDPy6+tWvrttky4E6NPF2lCX7BtWVvefLIbBmY6kBlVXK6uKXKVwtGx5Osbpp1A2k+naee0uZqGMXJ/e8ee+aJWTPw6ZHN64CFAL5numxpLFzK3/tmw4Do3mWZC+3l42ecrhXVzio/nTMs9GLWPzCMlNyv/dXFF++ogWiw9yVFPwIw3UUkjElHunDum0QyMWk5+2qwevyDO2XAKLq1MdGyjxiLaYtIL+dABSdbeb92tHPH/ymqhzrmnPhyxRoAqQzOLwNhI+j0jSFGSc/mwU9w5hbAilIO3vDWTLx3O8K1Y12P4iQfS5isKYx2jA0dW/nDvwxIe4STL2FLPvZyDmmLcLpLoGDL/oGMO/msrOSm/5R6BDfxOl+xQbLTZJKFiKIVj/RSO6j8boA/mgomA0gcTFsVk62hpYD0QgeqBtNW3RRLOBZ/1/nmdUX3kql82769djx3NO4KIjoru4wf18UnA9KLHaCCwkGJBuZ/qMLLTQyZBHdeAaAuXnXBtZh8CRPW6jmpSTR2ftVEfrHinHHE9iH6oIpdLBnbI8ZKk6maix3LolWvsZQa0eVSPdSzzKbyIy0Pk+QinDklNDXYS7mpQvFjpCPCBDGI3qD/oDUPLfrYkt8Sk93hlnM7BaAyOP9zYHtrveTq9wEEWwixhQD0ysZE693IpOCmiNGrorEDNbcunphWWoCTgWvXyobzJQEo71/QZ0z6s0K+NdNka0i+hDgWTQ1a8tFyBlKDpi3komAUcVPEteClyJWvMN7OyJleFs07/31U8zfkn/tzHGDqnKLB3vWKHmD6C9ngNRaZU8aE1WkV1C+SSlPeTLBFn3Qiy9mL3ZcX94wskvVjE1M10xOjgZ6dKvLJjCwAborJRUiudk2xKcQOtpLBFgNoHIPKjnDLuS+aNtdaVxno3Y6wG9RrjTXBS5FMjLgKoogomjiQGmzNvSp6VembYOPIRhG0eXkGVA72PSXW7pvpTtwa5EQg0dOyabTQGpnxioYbzx5OE/dhRPfcprIFPgssT84kDtfowHREA73rVPRt4LH/IKwgQxZ9vW3zyMnrJd7QQAPV/b0PWcMLoI8DS4G+ZkGGgd9UZUhE94SbR4ZvhvemDbRCj8zNTZRCD6CzbCN5/q/KrXLdw92NfwC57adrhk6N8AAAAABJRU5ErkJggg==')
+  // Load base64 images
+  this.load.image('banana', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAADsAAAA7AF5KHG9AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAA+1JREFUWIXtlVuIVVUYx3/f2nufvfeZM5fjJI4zRoYioWEJhtpDSGnihaiXiEAQ9MmHKKggepmXbkZEUElQD/WS6KMzag/iPGhpaFAZBRE2kE7e5nLmXPY5e+/19XA845zTeElzXvQPG9Za3/f9///1rcVecA93O5zpk/7+fnftkiXB0KlT8WwZMI3BO69tOxyODhdDPy6+tWvrttky4E6NPF2lCX7BtWVvefLIbBmY6kBlVXK6uKXKVwtGx5Osbpp1A2k+naee0uZqGMXJ/e8ee+aJWTPw6ZHN64CFAL5numxpLFzK3/tmw4Do3mWZC+3l42ecrhXVzio/nTMs9GLWPzCMlNyv/dXFF++ogWiw9yVFPwIw3UUkjElHunDum0QyMWk5+2qwevyDO2XAKLq1MdGyjxiLaYtIL+dABSdbeb92tHPH/ymqhzrmnPhyxRoAqQzOLwNhI+j0jSFGSc/mwU9w5hbAilIO3vDWTLx3O8K1Y12P4iQfS5isKYx2jA0dW/nDvwxIe4STL2FLPvZyDmmLcLpLoGDL/oGMO/msrOSm/5R6BDfxOl+xQbLTZJKFiKIVj/RSO6j8boA/mgomA0gcTFsVk62hpYD0QgeqBtNW3RRLOBZ/1/nmdUX3kql82769djx3NO4KIjoru4wf18UnA9KLHaCCwkGJBuZ/qMLLTQyZBHdeAaAuXnXBtZh8CRPW6jmpSTR2ftVEfrHinHHE9iH6oIpdLBnbI8ZKk6maix3LolWvsZQa0eVSPdSzzKbyIy0Pk+QinDklNDXYS7mpQvFjpCPCBDGI3qD/oDUPLfrYkt8Sk93hlnM7BaAyOP9zYHtrveTq9wEEWwixhQD0ysZE693IpOCmiNGrorEDNbcunphWWoCTgWvXyobzJQEo71/QZ0z6s0K+NdNka0i+hDgWTQ1a8tFyBlKDpi3komAUcVPEteClyJWvMN7OyJleFs07/31U8zfkn/tzHGDqnKLB3vWKHmD6C9ngNRaZU8aE1WkV1C+SSlPeTLBFn3Qiy9mL3ZcX94wskvVjE1M10xOjgZ6dKvLJjCwAborJRUiudk2xKcQOtpLBFgNoHIPKjnDLuS+aNtdaVxno3Y6wG9RrjTXBS5FMjLgKoogomjiQGmzNvSp6VembYOPIRhG0eXkGVA72PSXW7pvpTtwa5EQg0dOyabTQGpnxioYbzx5OE/dhRPfcprIFPgssT84kDtfowHREA73rVPRt4LH/IKwgQxZ9vW3zyMnrJd7QQAPV/b0PWcMLoI8DS4G+ZkGGgd9UZUhE94SbR4ZvhvemDbRCj8zNTZRCD6CzbCN5/q/KrXLdw92NfwC57adrhk6N8AAAAABJRU5ErkJggg==');
+  this.load.image('powerup-ice', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA7AAAAOwBeShxvQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAASVSURBVFiF7ZdNbFRVFMd/57ZT0pbQhE5RUbagIIjBkKDEdD7ExAWsBhMTKbKhtkNBEjFdSCa4QCGB0r4hdKNUF0a6gmiMOJ0ZEkWCmJBaENkZYkU6A6GBNnTad1z0veG96SdM3PFfnXvP1/+8e96578ETlIGwpefClp4rJ0ZlmRxeL9P/0QiELT0P1Cq8k4nLFa8uZOkqga+B4XRcNs43ppnLIJbQKs+yElgjcDGc1O1FYkndLnARWI2nqHXdGiiLQKhLX8sHGQ5Z2g5QOUpIoQeoQfmiaDgp1yj0VI4SAQhZ2l5X4G7E0g2z5Zj1CAw0KCwQ2ABw9kO5D2wPJTUtynGg1jEdFaU9vUuOub4CrwLVNiyZN4HYKa3I3+Kowo1gjmN5ZRABYKnXLtMqX0Y69ZIargCIzSt9bXK1JPYzAEYYjCW0Khdkt8Cy+iV80LtVJjxFPsTQEA1Ai8ChfJB+hFUAon4CAN6E0yQv+qjNi/kgvwscAlpuDxL02vkIZFvlplGiwFVgBcLnACosaUzovN+YxoRWqjiPfjLGcuCqGiJ9e+TfGQkApHZJ9m6Atc4Zu6iQBtpL3ohpEUtolTTQDlS4e6IcvxtgbaZFpgwtPwFVCVm6ZVGBMyo0e1WiHMgH6Y92anSm5NFOjeaD9ItywBdWaF5U4EzI0i2oii+udxGxtEnhpLMcVThloNuGGgELeN7x6rUn2GsMNwBsm2WmgiMoMcf3D5S4rYwYw07gbaDa0W1Lx+UrN6fvXM0E523Dd7ahr+oBPT/slduuLpbQl27Xs0eFj1FixvBW0c9wDaUWuKdwYDhAx287peCoL2w8rnurbJqAiC38MuMTmA/e6NKlE8KnwLslqm+BeDoufz1KvDlH8f+N0h5YrnAU+HHM0PNTi9xxdeu6NbCowB6B/cBC4D4PJ6Er3xPlk8V5OnoTMub6vnlEF48toEmUqF3BR9n3ZWAmAr4mBL6xbbqNUINgAS84XnM14TWFuIERG3YKbMVtQmVHepcU7xF/D6hKKMlmoFlgE1OP6E9jE0+1SQogbKkCpOMiMPka2gYLWFHiZyucBU5kWjmDiLoKfwIRzcTl9HCAzaKc8HET9tfnWOMmnw6pNknV51ijwn5fWOXEcIDNmbic9iafSgCIdmljXYHLKrR4tid0iIPec50JvQkZ0yEOAsULR4WWugKXo13aWGrvI9CY1KdtIQWsBK6j7HAquJVNyPhcyV1kEzIuyq3J7OwArgMrbSEV6dCnZiTQ0MCQQFJhX32O1WIYcCoYLE0S6dSV08meqgcBxDBQn2O1wj6B5OKl5Lx2vkno3NO73XXY0ucc8W+vXSip29RzWanhUqRL2/s8HyTAILAOm2d7E/IrcLiU5BQCpbBt/jGGcVHSAJsOa22hmqQoTSWm1Sp0hCx9OTBKq/Pl9DMQmVBuzpZj1kmYbZMLC2wWupWNV3NOoAkYQXivaDgpjwg0jVeTAUjH5TM7R122TS48NgGA79vkgSurcAfoV1ifbpWT7n66VU4qrAf6UYrT81Ea97EQtlTdYfS4KOvPSCFbjv8TAPwHafTPIV5ge84AAAAASUVORK5CYII=');
+  this.load.image('powerup-flame', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAD1AAAA9QHG8Yv2AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAohJREFUWIXtlr9rE2EYxz/v3aVJ2oiUNhZrc2kRRKEKCqJtRRRBlFJtotbVQRcdHPwHBEFEHBycXJyLtrQIHTpJB6mDONjBSagRS7HVmjTXH/bucdCiSe5HclWnPNs97/N8v5973pe7F+pRjy1GMZO+Ucya75fPd+wP069txdwaTD0AeYTQpWnayTAaRnhz86Yobm0+O7A7jE6oCeQvdO4Vxf3SrDojoP4LgO7Yd4GGEntkz0rW7P3nACvZrjSoc25rItyrdQo1A4jjDAC6x/IxK5O+/tcBlgfNU8Ws+USudMbA6QlAfGhl0tlqAQLHlR9ob9UNYwZoQ9RVNK4hciSgbR1NZZpGZieC9AMnoBv6baDtJ67cQWRXUA/QgCMjVrbzaFCh7wSW+s3mSJQcQlMVpm4x05hMHlKPX3/3KvCdQCTKkK+5JkTMPA37FkGJW0V3cWHhkp+H/xYIZ72WlOEQOzhPpGsJY0cRFbPd60QuhweAw+6qEO3+jJZY/y0U2/DS6AsFICcw2Dx8ZWG0F9C2r5XmUnkvqRa51BGvGYAkrpsKEOkoVOT05lX0Vsu9YdXxPOyeAOopNjBf0ZBYR3mM20i6Aiyo5588yALOgKCmKpLeLwOa69Be+Hn4Aihxhiv8rQiy6n6NsL9WbrVSVGhUDdA4lhsHmS7Pr71rQTZKW+3FOBtzidJC4U38wIdRP4/Af0Ehk+rWUS8FtpU0Rm30VgsVtXG+RbG/xPnz2CooOI7Tlxj/+HZLAADLg6nTmlLPyiF8RAuOyMXEWG4yqLaq33FiLDdpI70o9Sq4WqZtjZ5qzKHG24uAsjJmvxKGRHEc2PlraU4JU6Kp4cbR2QmF9zekHvUojx+EC8KFAt161wAAAABJRU5ErkJggg==');
+  this.load.image('powerup-thunder', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA3QAAAN0BcFOiBwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFGSURBVFiFxZavT8RAEEbflKN3AQUWi8Odb48gcARHgkOBgQT4Q4AEw6GQBEWCQ5Ac1eBwWDQK6JUfg29y1+1sm/3szuz30iYvK6qKLRKRdS9QCtJ833gJYgbIupuo3AKQ5mIFiKyLqByZd70BsrgPDMIB6MxxE+U2gIe5JdCtcAAdPQBmwwDcyzyw21R5fYBedwd0IRCARMBhk+X1ALJ4A1gOB9CQeMpxU3EW99HoydSgcs3ga3vSsdsX8BGP6Mq042oAf/EM/QC8xCPv5OMrO4C/eC5Z1w87gJ94vvmR86qhql+wZywH5Ia1zzc/AJUXe//vidOY/U0IPPYmLY9I81WXK+xPsmkRPXUdbQPglaS4CwlwBvoXCKBaPC0DVIunTQAn8bQI4Cae9gAcxdMWwIikeA4HUEM85XQ8q4eILJKMncVTzj+e+2DJc7znZQAAAABJRU5ErkJggg==');
 }
 
 function create() {
@@ -503,6 +508,9 @@ function update(_time, delta) {
   // Update flames
   updateFlames(delta);
 
+  // Update thunderbolts
+  updateThunderbolts(delta);
+
   // Check if banana should spawn (40% of pellets eaten)
   if (!bananaSpawnedThisLevel && !banana) {
     const totalPellets = pellets.length;
@@ -515,18 +523,27 @@ function update(_time, delta) {
     }
   }
 
-  // Spawn special powerups randomly when 20%, 60%, and 80% pellets eaten - only one at a time
+  // Spawn special powerups randomly and less frequently - only one at a time
   if (specialPowerups.length === 0 && !banana) {
     const totalPellets = pellets.length;
     const eatenPellets = pellets.filter(p => p.eaten).length;
     const percentEaten = eatenPellets / totalPellets;
 
-    if (percentEaten >= 0.2 && percentEaten < 0.25) {
-      spawnSpecialPowerup('freeze');
-    } else if (percentEaten >= 0.6 && percentEaten < 0.65) {
-      spawnSpecialPowerup('multiplier');
-    } else if (percentEaten >= 0.8 && percentEaten < 0.85) {
-      spawnSpecialPowerup('flame');
+    // Spawn at 30%, 60%, and 85% - less frequently than before
+    const powerupTypes = ['freeze', 'flame', 'thunder'];
+
+    if (percentEaten >= 0.3 && !powerupsSpawnedThisLevel.includes('first')) {
+      const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+      spawnSpecialPowerup(randomType);
+      powerupsSpawnedThisLevel.push('first');
+    } else if (percentEaten >= 0.6 && !powerupsSpawnedThisLevel.includes('second')) {
+      const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+      spawnSpecialPowerup(randomType);
+      powerupsSpawnedThisLevel.push('second');
+    } else if (percentEaten >= 0.85 && !powerupsSpawnedThisLevel.includes('third')) {
+      const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+      spawnSpecialPowerup(randomType);
+      powerupsSpawnedThisLevel.push('third');
     }
   }
 
@@ -1075,6 +1092,9 @@ function drawGame() {
   // Draw flames
   drawFlames();
 
+  // Draw thunderbolts
+  drawThunderbolts();
+
   // Draw banana with pulsing glow effect
   if (banana && banana.sprite) {
     const pulse = Math.sin(glowTimer / 150) * 0.15 + 1;
@@ -1090,137 +1110,31 @@ function drawGame() {
     );
   }
 
-  // Draw special powerups with distinctive visual effects
+  // Draw special powerups with pulsing sprite effect
   specialPowerups.forEach(powerup => {
-    const px = offsetX + powerup.gridX * tileSize + tileSize / 2 + shakeX;
-    const py = offsetY + powerup.gridY * tileSize + tileSize / 2 + shakeY;
-    const pulse = Math.sin(glowTimer / 100) * 0.15 + 1;
-    const rotation = (glowTimer / 20) % 360;
+    if (powerup.sprite) {
+      const pulse = Math.sin(glowTimer / 150) * 0.15 + 1;
+      powerup.sprite.setScale(0.8 * pulse);
 
-    if (powerup.type === 'freeze') {
-      // Ice/snowflake shape with 6 points
-      const size = 8 * pulse;
-      graphics.lineStyle(2, 0xaaffff, 1);
+      // Add glowing aura using graphics
+      const px = powerup.sprite.x;
+      const py = powerup.sprite.y;
+      const glowAlpha = (Math.sin(glowTimer / 150) * 0.3 + 0.5);
 
-      // Outer glow
-      graphics.fillStyle(0x00ffff, 0.3);
-      graphics.fillCircle(px, py, size + 4);
-
-      // Draw 6 lines for snowflake (3 lines crossing at center)
-      for (let i = 0; i < 3; i++) {
-        const angle = (i * 60 + rotation) * Math.PI / 180;
-        const x1 = px + Math.cos(angle) * size;
-        const y1 = py + Math.sin(angle) * size;
-        const x2 = px - Math.cos(angle) * size;
-        const y2 = py - Math.sin(angle) * size;
-
-        graphics.beginPath();
-        graphics.moveTo(x1, y1);
-        graphics.lineTo(x2, y2);
-        graphics.strokePath();
+      if (powerup.type === 'freeze') {
+        graphics.fillStyle(0x00ffff, glowAlpha * 0.4);
+        graphics.fillCircle(px, py, 20 * pulse);
+      } else if (powerup.type === 'thunder') {
+        graphics.fillStyle(0xffff00, glowAlpha * 0.4);
+        graphics.fillCircle(px, py, 20 * pulse);
+      } else if (powerup.type === 'flame') {
+        graphics.fillStyle(0xff4500, glowAlpha * 0.4);
+        graphics.fillCircle(px, py, 20 * pulse);
       }
-
-      // Center dot
-      graphics.fillStyle(0xffffff, 1);
-      graphics.fillCircle(px, py, 2);
-
-    } else if (powerup.type === 'multiplier') {
-      // Thunder/lightning bolt shape
-      const size = 10 * pulse;
-
-      // Outer glow
-      graphics.fillStyle(0xffd700, 0.4);
-      graphics.fillCircle(px, py, size + 3);
-
-      // Draw lightning bolt using triangles
-      graphics.fillStyle(0xffff00, 1);
-      graphics.beginPath();
-      graphics.moveTo(px, py - size);
-      graphics.lineTo(px - size * 0.3, py - size * 0.2);
-      graphics.lineTo(px + size * 0.2, py - size * 0.2);
-      graphics.lineTo(px - size * 0.5, py + size * 0.4);
-      graphics.lineTo(px, py + size * 0.1);
-      graphics.lineTo(px + size * 0.5, py + size);
-      graphics.lineTo(px + size * 0.1, py + size * 0.3);
-      graphics.lineTo(px + size * 0.4, py);
-      graphics.lineTo(px, py - size);
-      graphics.closePath();
-      graphics.fillPath();
-
-      // Inner highlight
-      graphics.fillStyle(0xffffff, 0.6);
-      graphics.fillRect(px - 1, py - size * 0.5, 2, size * 0.4);
-
-    } else if (powerup.type === 'flame') {
-      // Flame shape with pointed top
-      const size = 9 * pulse;
-      const flicker = Math.sin(glowTimer / 30) * 0.2 + 0.8;
-
-      // Outer glow
-      graphics.fillStyle(0xff4500, 0.4);
-      graphics.fillCircle(px, py, size + 4);
-
-      // Outer flame (orange)
-      graphics.fillStyle(0xff6600, flicker);
-      graphics.beginPath();
-      graphics.moveTo(px, py - size);
-      graphics.lineTo(px - size * 0.6, py + size * 0.6);
-      graphics.lineTo(px - size * 0.3, py + size * 0.3);
-      graphics.lineTo(px, py + size * 0.7);
-      graphics.lineTo(px + size * 0.3, py + size * 0.3);
-      graphics.lineTo(px + size * 0.6, py + size * 0.6);
-      graphics.lineTo(px, py - size);
-      graphics.closePath();
-      graphics.fillPath();
-
-      // Middle flame (yellow-orange)
-      graphics.fillStyle(0xffaa00, 1);
-      graphics.beginPath();
-      graphics.moveTo(px, py - size * 0.7);
-      graphics.lineTo(px - size * 0.4, py + size * 0.4);
-      graphics.lineTo(px, py + size * 0.5);
-      graphics.lineTo(px + size * 0.4, py + size * 0.4);
-      graphics.lineTo(px, py - size * 0.7);
-      graphics.closePath();
-      graphics.fillPath();
-
-      // Inner flame (bright yellow)
-      graphics.fillStyle(0xffff00, flicker);
-      graphics.beginPath();
-      graphics.moveTo(px, py - size * 0.4);
-      graphics.lineTo(px - size * 0.2, py + size * 0.2);
-      graphics.lineTo(px, py + size * 0.3);
-      graphics.lineTo(px + size * 0.2, py + size * 0.2);
-      graphics.lineTo(px, py - size * 0.4);
-      graphics.closePath();
-      graphics.fillPath();
     }
   });
 
-  // Draw active powerup indicators
-  if (freezeMode) {
-    const freezeText = 'FREEZE: ' + Math.ceil((freezeDuration - freezeTimer) / 1000) + 's';
-    graphics.fillStyle(0x00ffff, 0.3);
-    graphics.fillRect(650, 55, 140, 25);
-    const ft = sceneRef.add.text(720, 67, freezeText, {
-      fontSize: '14px',
-      fontFamily: 'Courier New, monospace',
-      color: '#00ffff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    ft.destroy(); // Temporary display trick
-  }
-
-  if (scoreMultiplier > 1) {
-    const multText = 'x' + scoreMultiplier + ' SCORE: ' + Math.ceil((multiplierDuration - multiplierTimer) / 1000) + 's';
-    const mt = sceneRef.add.text(90, 72, multText, {
-      fontSize: '14px',
-      fontFamily: 'Courier New, monospace',
-      color: '#ffd700',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    mt.destroy(); // Temporary display trick
-  }
+  // Draw active powerup indicators (removed all indicators to fix bluish square bug)
 
   // Draw ghosts with visual offset to prevent overlap (frozen ghosts shown with ice effect)
   ghosts.forEach(ghost => {
@@ -1438,13 +1352,18 @@ function continueToNextLevel() {
   banana = null;
   bananaSpawnedThisLevel = false;
 
-  // Reset special powerups
+  // Reset special powerups - destroy sprites first
+  specialPowerups.forEach(p => {
+    if (p.sprite) p.sprite.destroy();
+  });
   specialPowerups = [];
+  powerupsSpawnedThisLevel = [];
   freezeMode = false;
   freezeTimer = 0;
   scoreMultiplier = 1;
   multiplierTimer = 0;
   flames = [];
+  thunderbolts = [];
 
   // Reset positions
   pacman.gridX = 14;
@@ -1765,6 +1684,48 @@ function drawFlames() {
   });
 }
 
+function drawThunderbolts() {
+  const shakeX = cameraShake.x;
+  const shakeY = cameraShake.y;
+
+  thunderbolts.forEach(bolt => {
+    const alpha = Math.min(1, bolt.life / 0.3); // Fade in/out
+    const flicker = Math.random() > 0.3 ? 1 : 0.7; // Electric flicker
+
+    bolt.segments.forEach((segment, idx) => {
+      const x = offsetX + segment.gridX * tileSize + tileSize / 2 + shakeX;
+      const y = offsetY + segment.gridY * tileSize + tileSize / 2 + shakeY;
+
+      // Outer glow
+      graphics.fillStyle(0xffff00, alpha * 0.3 * flicker);
+      graphics.fillCircle(x, y, 8);
+
+      // Main lightning
+      graphics.fillStyle(0xffffff, alpha * 0.9 * flicker);
+      graphics.fillCircle(x, y, 4);
+
+      // Draw connecting line to next segment for continuous bolt effect
+      if (idx < bolt.segments.length - 1) {
+        const nextSeg = bolt.segments[idx + 1];
+        const nextX = offsetX + nextSeg.gridX * tileSize + tileSize / 2 + shakeX;
+        const nextY = offsetY + nextSeg.gridY * tileSize + tileSize / 2 + shakeY;
+
+        graphics.lineStyle(3, 0xffff00, alpha * 0.5 * flicker);
+        graphics.beginPath();
+        graphics.moveTo(x, y);
+        graphics.lineTo(nextX, nextY);
+        graphics.strokePath();
+
+        graphics.lineStyle(1, 0xffffff, alpha * flicker);
+        graphics.beginPath();
+        graphics.moveTo(x, y);
+        graphics.lineTo(nextX, nextY);
+        graphics.strokePath();
+      }
+    });
+  });
+}
+
 function createFloatingText(x, y, text, color) {
   const textObj = sceneRef.add.text(x, y, text, {
     fontSize: '22px',
@@ -1922,11 +1883,28 @@ function spawnSpecialPowerup(type) {
 
   if (emptyTiles.length > 0) {
     const tile = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+
+    // Create sprite based on powerup type
+    const x = offsetX + tile.x * tileSize + tileSize / 2;
+    const y = offsetY + tile.y * tileSize + tileSize / 2;
+    let spriteKey = '';
+
+    if (type === 'freeze') {
+      spriteKey = 'powerup-ice';
+    } else if (type === 'flame') {
+      spriteKey = 'powerup-flame';
+    } else if (type === 'thunder') {
+      spriteKey = 'powerup-thunder';
+    }
+
+    const powerupSprite = sceneRef.add.image(x, y, spriteKey).setScale(0.8);
+
     specialPowerups.push({
       gridX: tile.x,
       gridY: tile.y,
       type: type,
-      lifetime: 0
+      lifetime: 0,
+      sprite: powerupSprite
     });
   }
 }
@@ -1938,6 +1916,11 @@ function checkSpecialPowerupCollision() {
       const px = offsetX + powerup.gridX * tileSize + tileSize / 2;
       const py = offsetY + powerup.gridY * tileSize + tileSize / 2;
 
+      // Destroy sprite
+      if (powerup.sprite) {
+        powerup.sprite.destroy();
+      }
+
       if (powerup.type === 'freeze') {
         // Activate freeze mode
         freezeMode = true;
@@ -1946,14 +1929,13 @@ function checkSpecialPowerupCollision() {
         createParticleExplosion(px, py, 0x00ffff, 20);
         createFloatingText(px, py, 'FREEZE!', 0x00ffff);
         playTone(sceneRef, 400, 0.2);
-      } else if (powerup.type === 'multiplier') {
-        // Activate score multiplier
-        scoreMultiplier = 2;
-        multiplierTimer = 0;
+      } else if (powerup.type === 'thunder') {
+        // Create lightning strikes in all cardinal directions
+        createThunderStrikes(powerup.gridX, powerup.gridY);
 
-        createParticleExplosion(px, py, 0xffd700, 20);
-        createFloatingText(px, py, '2x SCORE!', 0xffd700);
-        playTone(sceneRef, 1100, 0.2);
+        createParticleExplosion(px, py, 0xffff00, 25);
+        createFloatingText(px, py, 'THUNDER!', 0xffff00);
+        playTone(sceneRef, 1200, 0.2);
       } else if (powerup.type === 'flame') {
         // Create circular flame pattern
         createFlameCircle(pacman.x + tileSize / 2, pacman.y + tileSize / 2);
@@ -1983,6 +1965,53 @@ function createFlameCircle(centerX, centerY) {
       size: 6
     });
   }
+}
+
+function createThunderStrikes(gridX, gridY) {
+  // Create lightning bolts in all four cardinal directions until they hit walls
+  const directions = [
+    { dx: 0, dy: -1 }, // up
+    { dx: 0, dy: 1 },  // down
+    { dx: -1, dy: 0 }, // left
+    { dx: 1, dy: 0 }   // right
+  ];
+
+  const currentMaze = getCurrentLayout();
+
+  directions.forEach(dir => {
+    let currentX = gridX;
+    let currentY = gridY;
+    const boltSegments = [];
+
+    // Travel in this direction until we hit a wall
+    while (true) {
+      currentX += dir.dx;
+      currentY += dir.dy;
+
+      // Check bounds
+      if (currentY < 0 || currentY >= currentMaze.length ||
+          currentX < 0 || currentX >= currentMaze[0].length) {
+        break;
+      }
+
+      // Check if it's a wall
+      if (currentMaze[currentY][currentX] === 1) {
+        break;
+      }
+
+      // Add this position to the bolt path
+      boltSegments.push({ gridX: currentX, gridY: currentY });
+    }
+
+    // Create the thunderbolt for this direction
+    if (boltSegments.length > 0) {
+      thunderbolts.push({
+        segments: boltSegments,
+        life: 0.8, // Bolt lasts 0.8 seconds
+        direction: dir
+      });
+    }
+  });
 }
 
 function updateFlames(delta) {
@@ -2045,6 +2074,71 @@ function updateFlames(delta) {
     // Remove if life expired
     if (flame.life <= 0) {
       flames.splice(i, 1);
+    }
+  }
+}
+
+function updateThunderbolts(delta) {
+  for (let i = thunderbolts.length - 1; i >= 0; i--) {
+    const bolt = thunderbolts[i];
+    bolt.life -= delta / 1000;
+
+    // Check collision with ghosts for each segment of the bolt
+    if (bolt.life > 0.6) { // Only deal damage in first 0.2 seconds
+      for (let segIdx = 0; segIdx < bolt.segments.length; segIdx++) {
+        const segment = bolt.segments[segIdx];
+
+        for (let g = 0; g < ghosts.length; g++) {
+          const ghost = ghosts[g];
+
+          // Skip ghosts that are in the spawn area or already hit
+          if (ghost.inSpawn || ghost.hitByThunder) continue;
+
+          // Check if ghost is on this segment
+          if (ghost.gridX === segment.gridX && ghost.gridY === segment.gridY) {
+            // Hit ghost - send back to spawn
+            const ghostCenterX = ghost.x + tileSize / 2;
+            const ghostCenterY = ghost.y + tileSize / 2;
+
+            createParticleExplosion(ghostCenterX, ghostCenterY, ghost.color, 20);
+            createFloatingText(ghostCenterX, ghostCenterY, '+300', 0xffff00);
+
+            score += 300;
+            scoreText.setText('SCORE: ' + score);
+            if (score > highScore) {
+              highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+            }
+
+            const startPositions = [
+              { x: 13, y: 14 },
+              { x: 12, y: 14 },
+              { x: 14, y: 14 },
+              { x: 15, y: 14 }
+            ];
+            const pos = startPositions[g];
+            ghost.gridX = pos.x;
+            ghost.gridY = pos.y;
+            ghost.x = offsetX + ghost.gridX * tileSize;
+            ghost.y = offsetY + ghost.gridY * tileSize;
+            ghost.targetX = ghost.x;
+            ghost.targetY = ghost.y;
+            ghost.vulnerable = false;
+            ghost.inSpawn = true;
+            ghost.exitTimer = 0;
+            ghost.exitDelay = 5000;
+            ghost.hitByThunder = true; // Mark as hit to prevent multiple hits from same bolt
+
+            playTone(sceneRef, 1800, 0.1);
+          }
+        }
+      }
+    }
+
+    // Remove if life expired
+    if (bolt.life <= 0) {
+      // Clear thunder hit markers when bolt expires
+      ghosts.forEach(g => g.hitByThunder = false);
+      thunderbolts.splice(i, 1);
     }
   }
 }
