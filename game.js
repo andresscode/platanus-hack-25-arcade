@@ -154,6 +154,13 @@ let readyText = null;
 let readyTimer = 0;
 let showReady = false;
 let livesAtLevelStart = 3;
+let specialPowerups = []; // For ghost freeze and score multiplier powerups
+let freezeMode = false;
+let freezeTimer = 0;
+let freezeDuration = 5000;
+let scoreMultiplier = 1;
+let multiplierTimer = 0;
+let multiplierDuration = 10000;
 
 // Maze layouts array - add more layouts here (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 // The game will cycle through layouts based on level
@@ -257,17 +264,18 @@ function create() {
     console.log('Storage not available, high scores will not persist');
   }
 
-  // Score display
+  // Score display with retro arcade font styling
   scoreText = this.add.text(16, 16, 'SCORE: 0', {
-    fontSize: '18px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
+    fontSize: '20px',
+    fontFamily: 'Courier New, monospace',
+    color: '#ffffff',
+    fontStyle: 'bold'
   });
 
-  // Combo display (below score)
-  comboText = this.add.text(16, 38, '', {
-    fontSize: '14px',
-    fontFamily: 'Arial, sans-serif',
+  // Combo display (below score) with retro styling
+  comboText = this.add.text(16, 40, '', {
+    fontSize: '16px',
+    fontFamily: 'Courier New, monospace',
     color: '#ffff00',
     fontStyle: 'bold'
   });
@@ -275,31 +283,33 @@ function create() {
   // Lives display - using Pacman sprites instead of text
   // Will be drawn in drawGame() function
 
-  // Level display
+  // Level display with retro styling
   levelText = this.add.text(400, 16, 'LEVEL: 1', {
-    fontSize: '18px',
-    fontFamily: 'Arial, sans-serif',
+    fontSize: '20px',
+    fontFamily: 'Courier New, monospace',
     color: '#00ffff',
-    align: 'center'
+    align: 'center',
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
-  // High score display
-  highScoreText = this.add.text(400, 36, 'HI-SCORE: ' + highScore + ' (' + highScoreName + ')', {
-    fontSize: '14px',
-    fontFamily: 'Arial, sans-serif',
+  // High score display with retro styling
+  highScoreText = this.add.text(400, 38, 'HI-SCORE: ' + highScore + ' (' + highScoreName + ')', {
+    fontSize: '16px',
+    fontFamily: 'Courier New, monospace',
     color: '#ffff00',
-    align: 'center'
+    align: 'center',
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
-  // Start instructions with better contrast
+  // Start instructions with retro arcade style
   startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
-    fontSize: '32px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff',
+    fontSize: '28px',
+    fontFamily: 'Courier New, monospace',
+    color: '#ffff00',
     align: 'center',
     stroke: '#000000',
-    strokeThickness: 8,
-    backgroundColor: '#000000',
+    strokeThickness: 6,
+    fontStyle: 'bold',
     padding: { x: 20, y: 10 }
   }).setOrigin(0.5);
 
@@ -429,12 +439,12 @@ function startGame() {
   if (startText) startText.destroy();
   livesAtLevelStart = lives;
 
-  // Show "READY!" message
+  // Show "READY!" message with retro styling
   showReady = true;
   readyTimer = 2000;
   readyText = sceneRef.add.text(400, 300, 'READY!', {
-    fontSize: '48px',
-    fontFamily: 'Arial, sans-serif',
+    fontSize: '52px',
+    fontFamily: 'Courier New, monospace',
     color: '#ffff00',
     stroke: '#000000',
     strokeThickness: 6,
@@ -477,16 +487,40 @@ function update(_time, delta) {
 
   // Combo decay system
   if (Date.now() - lastEatTime > comboDecayTime && eatCombo > 0) {
+    // Animate combo text disappearing
+    sceneRef.tweens.add({
+      targets: comboText,
+      scale: { from: 1, to: 0 },
+      alpha: { from: 1, to: 0 },
+      duration: 300,
+      ease: 'Power2',
+      onComplete: () => {
+        comboText.setText('');
+        comboText.setScale(1);
+        comboText.setAlpha(1);
+      }
+    });
     eatCombo = 0;
-    comboText.setText(''); // Clear combo text
   }
 
   // Update combo text display
   if (eatCombo > 1) {
     const comboColor = eatCombo > 10 ? '#ff0000' : eatCombo > 5 ? '#ff8800' : '#ffff00';
+    const prevText = comboText.text;
+    const newText = 'COMBO x' + eatCombo;
     comboText.setColor(comboColor);
-    comboText.setText('COMBO x' + eatCombo);
-  } else if (eatCombo === 0) {
+    comboText.setText(newText);
+
+    // Animate when combo increases
+    if (prevText !== newText && newText !== '') {
+      sceneRef.tweens.add({
+        targets: comboText,
+        scale: { from: 1.3, to: 1 },
+        duration: 200,
+        ease: 'Back.out'
+      });
+    }
+  } else if (eatCombo === 0 && comboText.text !== '') {
     comboText.setText('');
   }
 
@@ -519,6 +553,19 @@ function update(_time, delta) {
     }
   }
 
+  // Spawn special powerups randomly when 20% and 60% pellets eaten
+  if (specialPowerups.length === 0) {
+    const totalPellets = pellets.length;
+    const eatenPellets = pellets.filter(p => p.eaten).length;
+    const percentEaten = eatenPellets / totalPellets;
+
+    if (percentEaten >= 0.2 && percentEaten < 0.25) {
+      spawnSpecialPowerup('freeze');
+    } else if (percentEaten >= 0.6 && percentEaten < 0.65) {
+      spawnSpecialPowerup('multiplier');
+    }
+  }
+
   // Update banana lifetime
   if (banana) {
     banana.lifetime += delta;
@@ -546,6 +593,24 @@ function update(_time, delta) {
       powerTimer = 0;
       ghostEatCombo = 0; // Reset combo when power mode ends
       ghosts.forEach(g => g.vulnerable = false);
+    }
+  }
+
+  // Update freeze mode timer
+  if (freezeMode) {
+    freezeTimer += delta;
+    if (freezeTimer >= freezeDuration) {
+      freezeMode = false;
+      freezeTimer = 0;
+    }
+  }
+
+  // Update score multiplier timer
+  if (scoreMultiplier > 1) {
+    multiplierTimer += delta;
+    if (multiplierTimer >= multiplierDuration) {
+      scoreMultiplier = 1;
+      multiplierTimer = 0;
     }
   }
 
@@ -587,6 +652,9 @@ function update(_time, delta) {
 
       // Check banana collision
       checkBananaCollision();
+
+      // Check special powerup collision
+      checkSpecialPowerupCollision();
     }
   }
 
@@ -596,12 +664,14 @@ function update(_time, delta) {
   // Smooth ghost movement (always smooth)
   ghosts.forEach(g => smoothMovement(g, delta));
 
-  // Move ghosts - use different delay for vulnerable ghosts
-  ghostMoveTimer += delta;
-  const currentDelay = powerMode ? vulnerableGhostDelay : ghostMoveDelay;
-  if (ghostMoveTimer >= currentDelay) {
-    ghostMoveTimer = 0;
-    moveGhosts();
+  // Move ghosts - use different delay for vulnerable ghosts, don't move if frozen
+  if (!freezeMode) {
+    ghostMoveTimer += delta;
+    const currentDelay = powerMode ? vulnerableGhostDelay : ghostMoveDelay;
+    if (ghostMoveTimer >= currentDelay) {
+      ghostMoveTimer = 0;
+      moveGhosts();
+    }
   }
 
   // Check ghost collision
@@ -648,13 +718,21 @@ function checkPelletCollision() {
 
       const basePoints = 10;
       const comboBonus = eatCombo > 1 ? (eatCombo - 1) * 5 : 0;
-      const points = basePoints + comboBonus;
+      const points = Math.floor((basePoints + comboBonus) * scoreMultiplier);
 
       score += points;
       scoreText.setText('SCORE: ' + score);
       if (score > highScore) {
         highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
       }
+
+      // Subtle particle effect for pellet
+      createParticleExplosion(
+        offsetX + pellet.x * tileSize + tileSize / 2,
+        offsetY + pellet.y * tileSize + tileSize / 2,
+        0xffb897,
+        4  // Just 4 small particles
+      );
 
       // Speed boost every 50 pellets
       if (pelletsEatenThisLevel % 50 === 0 && moveDelay > 90) {
@@ -1056,7 +1134,55 @@ function drawGame() {
     );
   }
 
-  // Draw ghosts with visual offset to prevent overlap
+  // Draw special powerups with distinctive visual effects
+  specialPowerups.forEach(powerup => {
+    const px = offsetX + powerup.gridX * tileSize + tileSize / 2 + shakeX;
+    const py = offsetY + powerup.gridY * tileSize + tileSize / 2 + shakeY;
+    const pulse = Math.sin(glowTimer / 100) * 3 + 7;
+
+    if (powerup.type === 'freeze') {
+      // Ice blue powerup with snowflake shape
+      graphics.fillStyle(0x00ffff, 0.3);
+      graphics.fillCircle(px, py, pulse + 3);
+      graphics.fillStyle(0xaaffff, 1);
+      graphics.fillCircle(px, py, pulse);
+    } else if (powerup.type === 'multiplier') {
+      // Gold powerup with star effect
+      graphics.fillStyle(0xffd700, 0.3);
+      graphics.fillCircle(px, py, pulse + 3);
+      graphics.fillStyle(0xffff00, 1);
+      graphics.fillCircle(px, py, pulse);
+    }
+  });
+
+  // Draw active powerup indicators
+  if (freezeMode) {
+    const freezeText = 'FREEZE: ' + Math.ceil((freezeDuration - freezeTimer) / 1000) + 's';
+    graphics.fillStyle(0x00ffff, 0.3);
+    graphics.fillRect(650, 55, 140, 25);
+    const ft = sceneRef.add.text(720, 67, freezeText, {
+      fontSize: '14px',
+      fontFamily: 'Courier New, monospace',
+      color: '#00ffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    ft.destroy(); // Temporary display trick
+  }
+
+  if (scoreMultiplier > 1) {
+    const multText = 'x' + scoreMultiplier + ' SCORE: ' + Math.ceil((multiplierDuration - multiplierTimer) / 1000) + 's';
+    graphics.fillStyle(0xffd700, 0.3);
+    graphics.fillRect(10, 60, 160, 25);
+    const mt = sceneRef.add.text(90, 72, multText, {
+      fontSize: '14px',
+      fontFamily: 'Courier New, monospace',
+      color: '#ffd700',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    mt.destroy(); // Temporary display trick
+  }
+
+  // Draw ghosts with visual offset to prevent overlap (frozen ghosts shown with ice effect)
   ghosts.forEach(ghost => {
     const offsetAdjust = Math.sin(Date.now() / 1000 + ghost.visualOffset * Math.PI * 2) * 2;
     const ghostX = ghost.x + cameraShake.x;
@@ -1065,6 +1191,9 @@ function drawGame() {
     if (ghost.vulnerable) {
       const flicker = powerTimer > powerDuration - 2000 && Math.floor(powerTimer / 200) % 2;
       graphics.fillStyle(flicker ? 0xffffff : 0x2121de, 1);
+    } else if (freezeMode) {
+      // Frozen ghosts have a blue tint
+      graphics.fillStyle(0x88ddff, 0.8);
     } else {
       graphics.fillStyle(ghost.color, 1);
     }
@@ -1170,11 +1299,12 @@ function nextLevel() {
   levelCompleteOverlay.fillRect(0, 0, 800, 600);
 
   levelCompleteText = sceneRef.add.text(400, 250, 'LEVEL ' + level + ' COMPLETE!', {
-    fontSize: '48px',
-    fontFamily: 'Arial, sans-serif',
+    fontSize: '44px',
+    fontFamily: 'Courier New, monospace',
     color: '#00ff00',
     stroke: '#000000',
-    strokeThickness: 6
+    strokeThickness: 6,
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
   sceneRef.tweens.add({
@@ -1186,16 +1316,17 @@ function nextLevel() {
   });
 
   levelScoreText = sceneRef.add.text(400, 330, 'SCORE: ' + score, {
-    fontSize: '28px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffff00'
+    fontSize: '26px',
+    fontFamily: 'Courier New, monospace',
+    color: '#ffff00',
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
   // Show perfect bonus if earned
   if (perfectClear) {
     levelPerfectText = sceneRef.add.text(400, 370, 'PERFECT! +1000', {
-      fontSize: '24px',
-      fontFamily: 'Arial, sans-serif',
+      fontSize: '22px',
+      fontFamily: 'Courier New, monospace',
       color: '#00ff00',
       fontStyle: 'bold'
     }).setOrigin(0.5);
@@ -1212,9 +1343,10 @@ function nextLevel() {
   }
 
   levelContinueText = sceneRef.add.text(400, perfectClear ? 420 : 380, 'PRESS SPACE TO CONTINUE', {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
+    fontSize: '22px',
+    fontFamily: 'Courier New, monospace',
+    color: '#ffffff',
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
   sceneRef.tweens.add({
@@ -1265,6 +1397,13 @@ function continueToNextLevel() {
   if (banana && banana.sprite) banana.sprite.destroy();
   banana = null;
   bananaSpawnedThisLevel = false;
+
+  // Reset special powerups
+  specialPowerups = [];
+  freezeMode = false;
+  freezeTimer = 0;
+  scoreMultiplier = 1;
+  multiplierTimer = 0;
 
   // Reset positions
   pacman.gridX = 14;
@@ -1317,11 +1456,12 @@ function endGame() {
   overlay.fillRect(0, 0, 800, 600);
 
   const gameOverText = sceneRef.add.text(400, 200, 'GAME OVER', {
-    fontSize: '64px',
-    fontFamily: 'Arial, sans-serif',
+    fontSize: '56px',
+    fontFamily: 'Courier New, monospace',
     color: '#ff0000',
     stroke: '#000000',
-    strokeThickness: 8
+    strokeThickness: 8,
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
   sceneRef.tweens.add({
@@ -1333,9 +1473,10 @@ function endGame() {
   });
 
   sceneRef.add.text(400, 300, 'FINAL SCORE: ' + score, {
-    fontSize: '36px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
+    fontSize: '32px',
+    fontFamily: 'Courier New, monospace',
+    color: '#ffffff',
+    fontStyle: 'bold'
   }).setOrigin(0.5);
 
   // Check for high score
@@ -1343,23 +1484,26 @@ function endGame() {
     highScore = score;
 
     sceneRef.add.text(400, 360, 'NEW HIGH SCORE!', {
-      fontSize: '28px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#ffff00'
+      fontSize: '26px',
+      fontFamily: 'Courier New, monospace',
+      color: '#ffff00',
+      fontStyle: 'bold'
     }).setOrigin(0.5);
 
     // Prompt for name
     const namePrompt = sceneRef.add.text(400, 420, 'Enter your name (3 letters):', {
-      fontSize: '20px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#ffffff'
+      fontSize: '18px',
+      fontFamily: 'Courier New, monospace',
+      color: '#ffffff',
+      fontStyle: 'bold'
     }).setOrigin(0.5);
 
     let nameInput = '';
     const nameDisplay = sceneRef.add.text(400, 450, '___', {
-      fontSize: '32px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#00ffff'
+      fontSize: '28px',
+      fontFamily: 'Courier New, monospace',
+      color: '#00ffff',
+      fontStyle: 'bold'
     }).setOrigin(0.5);
 
     sceneRef.input.keyboard.on('keydown', function handleName(e) {
@@ -1383,17 +1527,19 @@ function endGame() {
         namePrompt.destroy();
         nameDisplay.destroy();
         sceneRef.add.text(400, 450, 'Saved! Press R to Restart', {
-          fontSize: '20px',
-          fontFamily: 'Arial, sans-serif',
-          color: '#00ff00'
+          fontSize: '18px',
+          fontFamily: 'Courier New, monospace',
+          color: '#00ff00',
+          fontStyle: 'bold'
         }).setOrigin(0.5);
       }
     });
   } else {
     sceneRef.add.text(400, 450, 'Press R to Restart', {
-      fontSize: '24px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#00ffff'
+      fontSize: '22px',
+      fontFamily: 'Courier New, monospace',
+      color: '#00ffff',
+      fontStyle: 'bold'
     }).setOrigin(0.5);
   }
 }
@@ -1525,7 +1671,9 @@ function smoothMovement(entity, delta) {
 function createParticleExplosion(x, y, color, count) {
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count;
-    const speed = 2 + Math.random() * 3;
+    // Smaller, slower particles for pellets (count <= 5), bigger for powerups
+    const speed = count <= 5 ? 1 + Math.random() * 1.5 : 2 + Math.random() * 3;
+    const size = count <= 5 ? 1 + Math.random() * 1 : 2 + Math.random() * 2;
     particles.push({
       x: x,
       y: y,
@@ -1533,7 +1681,7 @@ function createParticleExplosion(x, y, color, count) {
       vy: Math.sin(angle) * speed,
       color: color,
       life: 1.0,
-      size: 2 + Math.random() * 2
+      size: size
     });
   }
 }
@@ -1560,8 +1708,8 @@ function drawParticles() {
 
 function createFloatingText(x, y, text, color) {
   const textObj = sceneRef.add.text(x, y, text, {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
+    fontSize: '22px',
+    fontFamily: 'Courier New, monospace',
     color: '#' + color.toString(16).padStart(6, '0'),
     stroke: '#000000',
     strokeThickness: 4,
@@ -1664,5 +1812,62 @@ function checkBananaCollision() {
     banana.sprite.destroy();
     banana = null;
     playTone(sceneRef, 1000, 0.1);
+  }
+}
+
+function spawnSpecialPowerup(type) {
+  // Find a random empty path tile for the powerup
+  const currentMaze = getCurrentLayout();
+  const emptyTiles = [];
+
+  for (let y = 5; y < currentMaze.length - 5; y++) {
+    for (let x = 5; x < currentMaze[y].length - 5; x++) {
+      if (currentMaze[y][x] === 0 || currentMaze[y][x] === 2) {
+        // Only spawn in open areas, not too close to edges
+        if (!isGhostSpawn(x, y)) {
+          emptyTiles.push({ x, y });
+        }
+      }
+    }
+  }
+
+  if (emptyTiles.length > 0) {
+    const tile = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+    specialPowerups.push({
+      gridX: tile.x,
+      gridY: tile.y,
+      type: type,
+      lifetime: 0
+    });
+  }
+}
+
+function checkSpecialPowerupCollision() {
+  for (let i = specialPowerups.length - 1; i >= 0; i--) {
+    const powerup = specialPowerups[i];
+    if (powerup.gridX === pacman.gridX && powerup.gridY === pacman.gridY) {
+      const px = offsetX + powerup.gridX * tileSize + tileSize / 2;
+      const py = offsetY + powerup.gridY * tileSize + tileSize / 2;
+
+      if (powerup.type === 'freeze') {
+        // Activate freeze mode
+        freezeMode = true;
+        freezeTimer = 0;
+
+        createParticleExplosion(px, py, 0x00ffff, 20);
+        createFloatingText(px, py, 'FREEZE!', 0x00ffff);
+        playTone(sceneRef, 400, 0.2);
+      } else if (powerup.type === 'multiplier') {
+        // Activate score multiplier
+        scoreMultiplier = 2;
+        multiplierTimer = 0;
+
+        createParticleExplosion(px, py, 0xffd700, 20);
+        createFloatingText(px, py, '2x SCORE!', 0xffd700);
+        playTone(sceneRef, 1100, 0.2);
+      }
+
+      specialPowerups.splice(i, 1);
+    }
   }
 }
