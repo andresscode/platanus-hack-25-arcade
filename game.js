@@ -147,6 +147,12 @@ let pelletsEatenThisLevel = 0;
 let eatCombo = 0;
 let lastEatTime = 0;
 let comboDecayTime = 1000;
+let pacmanTrail = [];
+let cameraShake = { x: 0, y: 0, intensity: 0 };
+let readyText = null;
+let readyTimer = 0;
+let showReady = false;
+let livesAtLevelStart = 3;
 
 // Maze layouts array - add more layouts here (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 // The game will cycle through layouts based on level
@@ -412,15 +418,40 @@ function initGame() {
 function startGame() {
   gameStarted = true;
   if (startText) startText.destroy();
-  direction = { x: 1, y: 0 };
-  nextDirection = { x: 1, y: 0 };
+  livesAtLevelStart = lives;
+
+  // Show "READY!" message
+  showReady = true;
+  readyTimer = 2000;
+  readyText = sceneRef.add.text(400, 300, 'READY!', {
+    fontSize: '48px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffff00',
+    stroke: '#000000',
+    strokeThickness: 6,
+    fontStyle: 'bold'
+  }).setOrigin(0.5);
+
+  sceneRef.tweens.add({
+    targets: readyText,
+    scale: { from: 0, to: 1.2 },
+    duration: 400,
+    ease: 'Back.out'
+  });
+
+  setTimeout(() => {
+    if (readyText) readyText.destroy();
+    showReady = false;
+    direction = { x: 1, y: 0 };
+    nextDirection = { x: 1, y: 0 };
+  }, 2000);
 }
 
 function update(_time, delta) {
   // Always draw the game
   drawGame();
 
-  if (!gameStarted || gameOver || gameWon || levelComplete) return;
+  if (!gameStarted || gameOver || gameWon || levelComplete || showReady) return;
 
   glowTimer += delta;
   animTimer += delta;
@@ -438,6 +469,17 @@ function update(_time, delta) {
   // Combo decay system
   if (Date.now() - lastEatTime > comboDecayTime && eatCombo > 0) {
     eatCombo = 0;
+  }
+
+  // Update Pacman trail
+  updatePacmanTrail();
+
+  // Update camera shake
+  if (cameraShake.intensity > 0) {
+    cameraShake.intensity -= delta / 50;
+    if (cameraShake.intensity < 0) cameraShake.intensity = 0;
+    cameraShake.x = (Math.random() - 0.5) * cameraShake.intensity;
+    cameraShake.y = (Math.random() - 0.5) * cameraShake.intensity;
   }
 
   // Update particles
@@ -846,6 +888,7 @@ function checkGhostCollision() {
       } else {
         // Lose a life
         lives--;
+        cameraShake.intensity = 15; // Strong shake on death
 
         if (lives <= 0) {
           endGame();
@@ -891,6 +934,10 @@ function checkGhostCollision() {
 function drawGame() {
   graphics.clear();
 
+  // Apply camera shake offset
+  const shakeX = cameraShake.x;
+  const shakeY = cameraShake.y;
+
   // Screen flash overlay when power pellet is eaten
   if (screenFlash > 0) {
     graphics.fillStyle(0xffffff, Math.min(screenFlash / 10, 0.3));
@@ -913,14 +960,67 @@ function drawGame() {
     graphics.fillPath();
   }
 
+  // Draw combo meter
+  if (eatCombo > 1) {
+    const meterWidth = 100;
+    const meterHeight = 8;
+    const meterX = 350;
+    const meterY = 570;
+
+    graphics.lineStyle(2, 0xffffff, 0.5);
+    graphics.strokeRect(meterX, meterY, meterWidth, meterHeight);
+
+    const comboPercent = Math.min((Date.now() - lastEatTime) / comboDecayTime, 1);
+    const fillWidth = meterWidth * (1 - comboPercent);
+    const comboColor = eatCombo > 10 ? 0xff0000 : eatCombo > 5 ? 0xff8800 : 0xffff00;
+    graphics.fillStyle(comboColor, 0.8);
+    graphics.fillRect(meterX, meterY, fillWidth, meterHeight);
+
+    graphics.fillStyle(0xffffff, 1);
+    const comboTextX = meterX + meterWidth / 2;
+    const comboTextY = meterY - 12;
+    sceneRef.add.text(comboTextX, comboTextY, 'COMBO x' + eatCombo, {
+      fontSize: '12px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(1000);
+  }
+
+  // Draw power mode timer bar
+  if (powerMode) {
+    const barWidth = 200;
+    const barHeight = 6;
+    const barX = 300;
+    const barY = 45;
+
+    graphics.lineStyle(1, 0xffffff, 0.3);
+    graphics.strokeRect(barX, barY, barWidth, barHeight);
+
+    const powerPercent = 1 - (powerTimer / powerDuration);
+    const fillWidth = barWidth * powerPercent;
+    const flashColor = Math.floor(powerTimer / 200) % 2 === 0 ? 0x00ffff : 0x0088ff;
+    graphics.fillStyle(flashColor, 0.8);
+    graphics.fillRect(barX, barY, fillWidth, barHeight);
+  }
+
+  // Draw Pacman trail effect
+  pacmanTrail.forEach(trail => {
+    const alpha = trail.life;
+    const size = 6 * alpha;
+    const trailColor = powerMode ? 0x00ffff : 0xffaa00;
+    graphics.fillStyle(trailColor, alpha * 0.5);
+    graphics.fillCircle(trail.x + shakeX, trail.y + shakeY, size);
+  });
+
   // Draw maze walls with gradient effect
   walls.forEach(wall => {
     const hue = (wall.x + wall.y) * 0.1;
     const color = Phaser.Display.Color.HSVToRGB(hue % 1, 0.8, 0.6);
     graphics.fillStyle(Phaser.Display.Color.GetColor(color.r * 255, color.g * 255, color.b * 255), 1);
     graphics.fillRect(
-      offsetX + wall.x * tileSize + 1,
-      offsetY + wall.y * tileSize + 1,
+      offsetX + wall.x * tileSize + 1 + shakeX,
+      offsetY + wall.y * tileSize + 1 + shakeY,
       tileSize - 2,
       tileSize - 2
     );
@@ -931,8 +1031,8 @@ function drawGame() {
   pellets.forEach(pellet => {
     if (!pellet.eaten) {
       graphics.fillCircle(
-        offsetX + pellet.x * tileSize + tileSize / 2,
-        offsetY + pellet.y * tileSize + tileSize / 2,
+        offsetX + pellet.x * tileSize + tileSize / 2 + shakeX,
+        offsetY + pellet.y * tileSize + tileSize / 2 + shakeY,
         2
       );
     }
@@ -941,8 +1041,8 @@ function drawGame() {
   // Draw power pellets with pulsing neon effect
   powerPellets.forEach(pellet => {
     if (!pellet.eaten) {
-      const px = offsetX + pellet.x * tileSize + tileSize / 2;
-      const py = offsetY + pellet.y * tileSize + tileSize / 2;
+      const px = offsetX + pellet.x * tileSize + tileSize / 2 + shakeX;
+      const py = offsetY + pellet.y * tileSize + tileSize / 2 + shakeY;
       const pulse = Math.sin(glowTimer / 150) * 2 + 5;
 
       // Outer glow
@@ -979,6 +1079,8 @@ function drawGame() {
   // Draw ghosts with visual offset to prevent overlap
   ghosts.forEach(ghost => {
     const offsetAdjust = Math.sin(Date.now() / 1000 + ghost.visualOffset * Math.PI * 2) * 2;
+    const ghostX = ghost.x + cameraShake.x;
+    const ghostY = ghost.y + cameraShake.y;
 
     if (ghost.vulnerable) {
       const flicker = powerTimer > powerDuration - 2000 && Math.floor(powerTimer / 200) % 2;
@@ -989,40 +1091,52 @@ function drawGame() {
 
     // Ghost body
     graphics.fillCircle(
-      ghost.x + tileSize / 2 + offsetAdjust,
-      ghost.y + tileSize / 2 - 2,
+      ghostX + tileSize / 2 + offsetAdjust,
+      ghostY + tileSize / 2 - 2,
       tileSize / 2 - 2
     );
 
     graphics.fillRect(
-      ghost.x + 2 + offsetAdjust,
-      ghost.y + tileSize / 2,
+      ghostX + 2 + offsetAdjust,
+      ghostY + tileSize / 2,
       tileSize - 4,
       tileSize / 2 - 2
     );
 
     // Ghost eyes - ALWAYS visible
     graphics.fillStyle(0xffffff, 1);
-    graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 7, 2.5);
-    graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 7, 2.5);
+    graphics.fillCircle(ghostX + 6 + offsetAdjust, ghostY + 7, 2.5);
+    graphics.fillCircle(ghostX + 12 + offsetAdjust, ghostY + 7, 2.5);
+
+    // Pupils that look in direction of movement
+    const pupilOffsetX = ghost.direction.x * 0.8;
+    const pupilOffsetY = ghost.direction.y * 0.8;
 
     if (ghost.vulnerable) {
-      // Smaller blue pupils when vulnerable
+      // Smaller blue pupils when vulnerable - looking scared/away
       graphics.fillStyle(0x0000ff, 1);
-      graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 8, 1);
-      graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 8, 1);
+      graphics.fillCircle(ghostX + 6 + offsetAdjust - pupilOffsetX, ghostY + 8 - pupilOffsetY, 1);
+      graphics.fillCircle(ghostX + 12 + offsetAdjust - pupilOffsetX, ghostY + 8 - pupilOffsetY, 1);
     } else {
-      // Normal pupils
+      // Normal pupils looking in movement direction
       graphics.fillStyle(0x0000ff, 1);
-      graphics.fillCircle(ghost.x + 6 + offsetAdjust, ghost.y + 7, 1);
-      graphics.fillCircle(ghost.x + 12 + offsetAdjust, ghost.y + 7, 1);
+      graphics.fillCircle(ghostX + 6 + offsetAdjust + pupilOffsetX, ghostY + 7 + pupilOffsetY, 1);
+      graphics.fillCircle(ghostX + 12 + offsetAdjust + pupilOffsetX, ghostY + 7 + pupilOffsetY, 1);
     }
   });
 }
 
 function drawPacman() {
-  const centerX = pacman.x + tileSize / 2;
-  const centerY = pacman.y + tileSize / 2;
+  const centerX = pacman.x + tileSize / 2 + cameraShake.x;
+  const centerY = pacman.y + tileSize / 2 + cameraShake.y;
+
+  // Glow effect when in power mode or high combo
+  if (powerMode || eatCombo > 5) {
+    const glowSize = (tileSize / 2 + 3) + Math.sin(glowTimer / 100) * 2;
+    const glowColor = powerMode ? 0x00ffff : 0xffaa00;
+    graphics.fillStyle(glowColor, 0.3);
+    graphics.fillCircle(centerX, centerY, glowSize);
+  }
 
   graphics.fillStyle(0xffff00, 1);
 
@@ -1055,6 +1169,19 @@ let levelContinueText;
 
 function nextLevel() {
   levelComplete = true;
+
+  // Check for perfect clear (no lives lost)
+  const perfectClear = lives === livesAtLevelStart;
+  const perfectBonus = perfectClear ? 1000 : 0;
+
+  if (perfectClear) {
+    score += perfectBonus;
+    scoreText.setText('SCORE: ' + score);
+    if (score > highScore) {
+      highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
+    }
+  }
+
   playTone(sceneRef, 880, 0.3);
 
   levelCompleteOverlay = sceneRef.add.graphics();
@@ -1083,7 +1210,25 @@ function nextLevel() {
     color: '#ffff00'
   }).setOrigin(0.5);
 
-  levelContinueText = sceneRef.add.text(400, 380, 'PRESS SPACE TO CONTINUE', {
+  // Show perfect bonus if earned
+  if (perfectClear) {
+    const perfectText = sceneRef.add.text(400, 370, 'PERFECT! +1000', {
+      fontSize: '24px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#00ff00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    sceneRef.tweens.add({
+      targets: perfectText,
+      scale: { from: 0.8, to: 1.1 },
+      duration: 600,
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  levelContinueText = sceneRef.add.text(400, perfectClear ? 420 : 380, 'PRESS SPACE TO CONTINUE', {
     fontSize: '24px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
@@ -1109,6 +1254,7 @@ function continueToNextLevel() {
   levelText.setText('LEVEL: ' + level);
   levelComplete = false;
   pelletsEatenThisLevel = 0;
+  livesAtLevelStart = lives;
 
   // Regenerate maze layout for new level - this is critical!
   walls = [];
@@ -1463,6 +1609,30 @@ function updateFloatingTexts(delta) {
       const scale = 1 + Math.sin(ft.life * 5) * 0.2;
       ft.textObj.setScale(scale);
     }
+  }
+}
+
+function updatePacmanTrail() {
+  // Add new trail point
+  if (direction.x !== 0 || direction.y !== 0) {
+    pacmanTrail.push({
+      x: pacman.x + tileSize / 2,
+      y: pacman.y + tileSize / 2,
+      life: 1
+    });
+  }
+
+  // Update and remove old trail points
+  for (let i = pacmanTrail.length - 1; i >= 0; i--) {
+    pacmanTrail[i].life -= 0.05;
+    if (pacmanTrail[i].life <= 0) {
+      pacmanTrail.splice(i, 1);
+    }
+  }
+
+  // Limit trail length
+  if (pacmanTrail.length > 15) {
+    pacmanTrail.shift();
   }
 }
 
