@@ -142,6 +142,11 @@ let ghostEatCombo = 0;
 let banana = null;
 let bananaLifetime = 10000; // Banana stays for 10 seconds
 let bananaSpawnedThisLevel = false;
+let screenFlash = 0;
+let pelletsEatenThisLevel = 0;
+let eatCombo = 0;
+let lastEatTime = 0;
+let comboDecayTime = 1000;
 
 // Maze layouts array - add more layouts here (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
 // The game will cycle through layouts based on level
@@ -230,12 +235,19 @@ function create() {
   sceneRef = this;
   graphics = this.add.graphics();
 
-  // Load high score from localStorage
-  const saved = localStorage.getItem('pacmanHighScore');
-  if (saved) {
-    const data = JSON.parse(saved);
-    highScore = data.score || 0;
-    highScoreName = data.name || 'AAA';
+  // Load high score from localStorage with error handling
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage !== null) {
+      const saved = localStorage.getItem('pacmanHighScore');
+      if (saved) {
+        const data = JSON.parse(saved);
+        highScore = data.score || 0;
+        highScoreName = data.name || 'AAA';
+      }
+    }
+  } catch (e) {
+    // Storage not available or error accessing it - just continue without it
+    console.log('Storage not available, high scores will not persist');
   }
 
   // Score display
@@ -245,12 +257,8 @@ function create() {
     color: '#ffffff'
   });
 
-  // Lives display
-  livesText = this.add.text(708, 16, 'LIVES: 3', {
-    fontSize: '18px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
-  });
+  // Lives display - using Pacman sprites instead of text
+  // Will be drawn in drawGame() function
 
   // Level display
   levelText = this.add.text(400, 16, 'LEVEL: 1', {
@@ -421,6 +429,17 @@ function update(_time, delta) {
     animTimer = 0;
   }
 
+  // Screen flash effect decay
+  if (screenFlash > 0) {
+    screenFlash -= delta / 100;
+    if (screenFlash < 0) screenFlash = 0;
+  }
+
+  // Combo decay system
+  if (Date.now() - lastEatTime > comboDecayTime && eatCombo > 0) {
+    eatCombo = 0;
+  }
+
   // Update particles
   updateParticles(delta);
 
@@ -555,12 +574,49 @@ function checkPelletCollision() {
   for (let pellet of pellets) {
     if (!pellet.eaten && pellet.x === pacman.gridX && pellet.y === pacman.gridY) {
       pellet.eaten = true;
-      score += 10;
+      pelletsEatenThisLevel++;
+
+      // Combo system - eat pellets quickly for bonus points
+      const now = Date.now();
+      if (now - lastEatTime < comboDecayTime) {
+        eatCombo++;
+      } else {
+        eatCombo = 1;
+      }
+      lastEatTime = now;
+
+      const basePoints = 10;
+      const comboBonus = eatCombo > 1 ? (eatCombo - 1) * 5 : 0;
+      const points = basePoints + comboBonus;
+
+      score += points;
       scoreText.setText('SCORE: ' + score);
       if (score > highScore) {
         highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
       }
-      playTone(sceneRef, 880, 0.05);
+
+      // Show combo text
+      if (eatCombo > 3) {
+        createFloatingText(
+          pacman.x + tileSize / 2,
+          pacman.y - 20,
+          'x' + eatCombo + '!',
+          0xffff00
+        );
+      }
+
+      // Speed boost every 50 pellets
+      if (pelletsEatenThisLevel % 50 === 0 && moveDelay > 90) {
+        moveDelay -= 5;
+        createFloatingText(
+          pacman.x + tileSize / 2,
+          pacman.y - 30,
+          'SPEED UP!',
+          0x00ffff
+        );
+      }
+
+      playTone(sceneRef, 880 + (eatCombo * 20), 0.05);
     }
   }
 
@@ -578,12 +634,15 @@ function checkPelletCollision() {
       ghostEatCombo = 0; // Reset combo counter
       ghosts.forEach(g => g.vulnerable = true);
 
+      // Screen flash effect
+      screenFlash = 10;
+
       // Create explosion effect for power pellet
       createParticleExplosion(
         offsetX + pellet.x * tileSize + tileSize / 2,
         offsetY + pellet.y * tileSize + tileSize / 2,
         0xffb897,
-        15
+        25
       );
 
       playTone(sceneRef, 660, 0.2);
@@ -787,7 +846,6 @@ function checkGhostCollision() {
       } else {
         // Lose a life
         lives--;
-        livesText.setText('LIVES: ' + lives);
 
         if (lives <= 0) {
           endGame();
@@ -832,6 +890,28 @@ function checkGhostCollision() {
 
 function drawGame() {
   graphics.clear();
+
+  // Screen flash overlay when power pellet is eaten
+  if (screenFlash > 0) {
+    graphics.fillStyle(0xffffff, Math.min(screenFlash / 10, 0.3));
+    graphics.fillRect(0, 0, 800, 600);
+  }
+
+  // Draw lives as Pacman icons in top-right corner
+  for (let i = 0; i < lives; i++) {
+    const lifeX = 720 + i * 22;
+    const lifeY = 26;
+    graphics.fillStyle(0xffff00, 1);
+    graphics.slice(
+      lifeX,
+      lifeY,
+      8,
+      Phaser.Math.DegToRad(30),
+      Phaser.Math.DegToRad(330),
+      false
+    );
+    graphics.fillPath();
+  }
 
   // Draw maze walls with gradient effect
   walls.forEach(wall => {
@@ -1028,6 +1108,7 @@ function continueToNextLevel() {
   level++;
   levelText.setText('LEVEL: ' + level);
   levelComplete = false;
+  pelletsEatenThisLevel = 0;
 
   // Regenerate maze layout for new level - this is critical!
   walls = [];
@@ -1160,7 +1241,14 @@ function endGame() {
         nameDisplay.setText(nameInput + '___'.substring(nameInput.length));
       } else if (e.code === 'Enter' && nameInput.length === 3) {
         highScoreName = nameInput;
-        localStorage.setItem('pacmanHighScore', JSON.stringify({ score: highScore, name: highScoreName }));
+        // Safe localStorage save with error handling
+        try {
+          if (typeof localStorage !== 'undefined' && localStorage !== null) {
+            localStorage.setItem('pacmanHighScore', JSON.stringify({ score: highScore, name: highScoreName }));
+          }
+        } catch (err) {
+          console.log('Could not save high score');
+        }
         sceneRef.input.keyboard.off('keydown', handleName);
         namePrompt.destroy();
         nameDisplay.destroy();
@@ -1194,7 +1282,6 @@ function restartGame() {
   animTimer = 0;
 
   scoreText.setText('SCORE: 0');
-  livesText.setText('LIVES: 3');
   levelText.setText('LEVEL: 1');
   highScoreText.setText('HI-SCORE: ' + highScore + ' (' + highScoreName + ')');
 
