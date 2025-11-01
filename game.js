@@ -110,6 +110,7 @@ let livesText;
 let levelText;
 let highScoreText;
 let startText;
+let comboText;
 let gameStarted = false;
 let gameOver = false;
 let gameWon = false;
@@ -261,6 +262,14 @@ function create() {
     fontSize: '18px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
+  });
+
+  // Combo display (below score)
+  comboText = this.add.text(16, 38, '', {
+    fontSize: '14px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffff00',
+    fontStyle: 'bold'
   });
 
   // Lives display - using Pacman sprites instead of text
@@ -469,6 +478,16 @@ function update(_time, delta) {
   // Combo decay system
   if (Date.now() - lastEatTime > comboDecayTime && eatCombo > 0) {
     eatCombo = 0;
+    comboText.setText(''); // Clear combo text
+  }
+
+  // Update combo text display
+  if (eatCombo > 1) {
+    const comboColor = eatCombo > 10 ? '#ff0000' : eatCombo > 5 ? '#ff8800' : '#ffff00';
+    comboText.setColor(comboColor);
+    comboText.setText('COMBO x' + eatCombo);
+  } else if (eatCombo === 0) {
+    comboText.setText('');
   }
 
   // Update Pacman trail
@@ -637,25 +656,30 @@ function checkPelletCollision() {
         highScoreText.setText('HI-SCORE: ' + score + ' (YOU)');
       }
 
-      // Show combo text
-      if (eatCombo > 3) {
-        createFloatingText(
-          pacman.x + tileSize / 2,
-          pacman.y - 20,
-          'x' + eatCombo + '!',
-          0xffff00
-        );
-      }
-
       // Speed boost every 50 pellets
       if (pelletsEatenThisLevel % 50 === 0 && moveDelay > 90) {
         moveDelay -= 5;
-        createFloatingText(
-          pacman.x + tileSize / 2,
-          pacman.y - 30,
-          'SPEED UP!',
-          0x00ffff
-        );
+
+        // Position text to avoid blocking Pacman's path
+        let textX = pacman.x + tileSize / 2;
+        let textY = pacman.y - 30;
+
+        if (direction.y < 0) {
+          // Moving up - show to the side
+          textX = pacman.x + tileSize / 2 + 35;
+          textY = pacman.y + tileSize / 2;
+        } else if (direction.y > 0) {
+          // Moving down - show above
+          textY = pacman.y - 35;
+        } else if (direction.x < 0) {
+          // Moving left - show to the right
+          textX = pacman.x + tileSize / 2 + 35;
+        } else if (direction.x > 0) {
+          // Moving right - show to the left
+          textX = pacman.x + tileSize / 2 - 35;
+        }
+
+        createFloatingText(textX, textY, 'SPEED UP!', 0x00ffff);
       }
 
       playTone(sceneRef, 880 + (eatCombo * 20), 0.05);
@@ -960,50 +984,6 @@ function drawGame() {
     graphics.fillPath();
   }
 
-  // Draw combo meter
-  if (eatCombo > 1) {
-    const meterWidth = 100;
-    const meterHeight = 8;
-    const meterX = 350;
-    const meterY = 570;
-
-    graphics.lineStyle(2, 0xffffff, 0.5);
-    graphics.strokeRect(meterX, meterY, meterWidth, meterHeight);
-
-    const comboPercent = Math.min((Date.now() - lastEatTime) / comboDecayTime, 1);
-    const fillWidth = meterWidth * (1 - comboPercent);
-    const comboColor = eatCombo > 10 ? 0xff0000 : eatCombo > 5 ? 0xff8800 : 0xffff00;
-    graphics.fillStyle(comboColor, 0.8);
-    graphics.fillRect(meterX, meterY, fillWidth, meterHeight);
-
-    graphics.fillStyle(0xffffff, 1);
-    const comboTextX = meterX + meterWidth / 2;
-    const comboTextY = meterY - 12;
-    sceneRef.add.text(comboTextX, comboTextY, 'COMBO x' + eatCombo, {
-      fontSize: '12px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#ffffff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(1000);
-  }
-
-  // Draw power mode timer bar
-  if (powerMode) {
-    const barWidth = 200;
-    const barHeight = 6;
-    const barX = 300;
-    const barY = 45;
-
-    graphics.lineStyle(1, 0xffffff, 0.3);
-    graphics.strokeRect(barX, barY, barWidth, barHeight);
-
-    const powerPercent = 1 - (powerTimer / powerDuration);
-    const fillWidth = barWidth * powerPercent;
-    const flashColor = Math.floor(powerTimer / 200) % 2 === 0 ? 0x00ffff : 0x0088ff;
-    graphics.fillStyle(flashColor, 0.8);
-    graphics.fillRect(barX, barY, fillWidth, barHeight);
-  }
-
   // Draw Pacman trail effect
   pacmanTrail.forEach(trail => {
     const alpha = trail.life;
@@ -1166,6 +1146,7 @@ let levelCompleteOverlay;
 let levelCompleteText;
 let levelScoreText;
 let levelContinueText;
+let levelPerfectText;
 
 function nextLevel() {
   levelComplete = true;
@@ -1212,7 +1193,7 @@ function nextLevel() {
 
   // Show perfect bonus if earned
   if (perfectClear) {
-    const perfectText = sceneRef.add.text(400, 370, 'PERFECT! +1000', {
+    levelPerfectText = sceneRef.add.text(400, 370, 'PERFECT! +1000', {
       fontSize: '24px',
       fontFamily: 'Arial, sans-serif',
       color: '#00ff00',
@@ -1220,12 +1201,14 @@ function nextLevel() {
     }).setOrigin(0.5);
 
     sceneRef.tweens.add({
-      targets: perfectText,
+      targets: levelPerfectText,
       scale: { from: 0.8, to: 1.1 },
       duration: 600,
       yoyo: true,
       repeat: -1
     });
+  } else {
+    levelPerfectText = null;
   }
 
   levelContinueText = sceneRef.add.text(400, perfectClear ? 420 : 380, 'PRESS SPACE TO CONTINUE', {
@@ -1249,6 +1232,7 @@ function continueToNextLevel() {
   if (levelCompleteText) levelCompleteText.destroy();
   if (levelScoreText) levelScoreText.destroy();
   if (levelContinueText) levelContinueText.destroy();
+  if (levelPerfectText) levelPerfectText.destroy();
 
   level++;
   levelText.setText('LEVEL: ' + level);
