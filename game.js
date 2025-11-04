@@ -13,9 +13,9 @@
 // To use in your game:
 //   if (key === 'P1U') { ... }  // Works on both arcade and local (via keyboard)
 //
-// CURRENT GAME USAGE (Snake):
-//   - P1U/P1D/P1L/P1R (Joystick) → Snake Direction
-//   - P1A (Button A) or START1 (Start Button) → Restart Game
+// CURRENT GAME USAGE (Pacman):
+//   - P1U/P1D/P1L/P1R (Joystick) → Pacman Direction
+//   - START1 (Start Button) → Start Game / Continue / Restart
 // =============================================================================
 
 const ARCADE_CONTROLS = {
@@ -373,7 +373,7 @@ function create() {
   startOverlay.fillRect(0, 0, 800, 600);
 
   // Start instructions with retro arcade style
-  startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
+  startText = this.add.text(400, 300, 'PRESS START TO BEGIN', {
     fontSize: '28px',
     fontFamily: 'Courier New, monospace',
     color: '#ffff00',
@@ -399,32 +399,38 @@ function create() {
   // Start background music
   startBgMusic(this);
 
-  // Keyboard input
+  // Keyboard and Arcade input handler
   this.input.keyboard.on('keydown', (event) => {
-    if (!gameStarted && event.code === 'Space') {
-      startGame();
-      return;
-    }
+    // Map keyboard key to arcade button code
+    const arcadeButton = KEYBOARD_TO_ARCADE[event.key] || KEYBOARD_TO_ARCADE[event.code];
 
-    if ((gameOver || gameWon) && event.code === 'KeyR') {
-      restartGame();
-      return;
-    }
-
-    if (levelComplete && event.code === 'Space') {
-      continueToNextLevel();
+    // Handle START button (start game, continue, restart)
+    if (arcadeButton === 'START1') {
+      if (!gameStarted) {
+        startGame();
+        return;
+      }
+      if (gameOver || gameWon) {
+        restartGame();
+        return;
+      }
+      if (levelComplete) {
+        continueToNextLevel();
+        return;
+      }
       return;
     }
 
     if (!gameStarted || gameOver || gameWon || levelComplete) return;
 
-    if (event.code === 'ArrowUp') {
+    // Handle Player 1 joystick directions
+    if (arcadeButton === 'P1U') {
       nextDirection = { x: 0, y: -1 };
-    } else if (event.code === 'ArrowDown') {
+    } else if (arcadeButton === 'P1D') {
       nextDirection = { x: 0, y: 1 };
-    } else if (event.code === 'ArrowLeft') {
+    } else if (arcadeButton === 'P1L') {
       nextDirection = { x: -1, y: 0 };
-    } else if (event.code === 'ArrowRight') {
+    } else if (arcadeButton === 'P1R') {
       nextDirection = { x: 1, y: 0 };
     }
   });
@@ -1365,7 +1371,7 @@ function nextLevel() {
     levelPerfectText = null;
   }
 
-  levelContinueText = sceneRef.add.text(400, perfectClear ? 420 : 380, 'PRESS SPACE TO CONTINUE', {
+  levelContinueText = sceneRef.add.text(400, perfectClear ? 420 : 380, 'PRESS START TO CONTINUE', {
     fontSize: '22px',
     fontFamily: 'Courier New, monospace',
     color: '#ffffff',
@@ -1555,7 +1561,7 @@ function endGame() {
         sceneRef.input.keyboard.off('keydown', handleName);
         namePrompt.destroy();
         nameDisplay.destroy();
-        sceneRef.add.text(400, 450, 'Saved! Press R to Restart', {
+        sceneRef.add.text(400, 450, 'SAVED! PRESS START TO RESTART', {
           fontSize: '18px',
           fontFamily: 'Courier New, monospace',
           color: '#00ff00',
@@ -1564,7 +1570,7 @@ function endGame() {
       }
     });
   } else {
-    sceneRef.add.text(400, 450, 'Press R to Restart', {
+    sceneRef.add.text(400, 450, 'PRESS START TO RESTART', {
       fontSize: '22px',
       fontFamily: 'Courier New, monospace',
       color: '#00ffff',
