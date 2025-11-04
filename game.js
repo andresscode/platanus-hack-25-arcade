@@ -1,5 +1,5 @@
-// Platanus Hack 25: Snake Game
-// Navigate the snake around the "PLATANUS HACK ARCADE" title made of blocks!
+// Platanus Hack 25: Pacman Clone
+// Classic arcade action - eat pellets, avoid ghosts!
 
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
@@ -87,119 +87,142 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+// Game constants
+const tileSize = 18;
+const mazeWidth = 28;
+const mazeHeight = 30;
+const offsetX = 100;
+const offsetY = 50;
+
 // Game variables
-let snake = [];
-let snakeSize = 15;
-let direction = { x: 1, y: 0 };
-let nextDirection = { x: 1, y: 0 };
-let food;
+let pacman;
+let ghosts = [];
+let pellets = [];
+let powerPellets = [];
+let walls = [];
 let score = 0;
+let lives = 3;
 let scoreText;
-let titleBlocks = [];
+let livesText;
+let startText;
+let gameStarted = false;
 let gameOver = false;
-let moveTimer = 0;
-let moveDelay = 100;  // Faster initial speed (was 150ms)
+let gameWon = false;
 let graphics;
+let sceneRef;
+let direction = { x: 0, y: 0 };
+let nextDirection = { x: 0, y: 0 };
+let moveTimer = 0;
+let moveDelay = 120;
+let ghostMoveTimer = 0;
+let ghostMoveDelay = 180;
+let powerMode = false;
+let powerTimer = 0;
+let powerDuration = 8000;
+let mouthOpen = true;
+let animTimer = 0;
 
-// Pixel font patterns (5x5 grid for each letter)
-const letters = {
-  P: [[1,1,1,1],[1,0,0,1],[1,1,1,1],[1,0,0,0],[1,0,0,0]],
-  L: [[1,0,0,0],[1,0,0,0],[1,0,0,0],[1,0,0,0],[1,1,1,1]],
-  A: [[0,1,1,0],[1,0,0,1],[1,1,1,1],[1,0,0,1],[1,0,0,1]],
-  T: [[1,1,1,1],[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]],
-  N: [[1,0,0,1],[1,1,0,1],[1,0,1,1],[1,0,0,1],[1,0,0,1]],
-  U: [[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,1,1,1]],
-  S: [[0,1,1,1],[1,0,0,0],[0,1,1,0],[0,0,0,1],[1,1,1,0]],
-  H: [[1,0,0,1],[1,0,0,1],[1,1,1,1],[1,0,0,1],[1,0,0,1]],
-  C: [[0,1,1,1],[1,0,0,0],[1,0,0,0],[1,0,0,0],[0,1,1,1]],
-  K: [[1,0,0,1],[1,0,1,0],[1,1,0,0],[1,0,1,0],[1,0,0,1]],
-  '2': [[1,1,1,0],[0,0,0,1],[0,1,1,0],[1,0,0,0],[1,1,1,1]],
-  '5': [[1,1,1,1],[1,0,0,0],[1,1,1,0],[0,0,0,1],[1,1,1,0]],
-  ':': [[0,0,0,0],[0,1,0,0],[0,0,0,0],[0,1,0,0],[0,0,0,0]],
-  R: [[1,1,1,0],[1,0,0,1],[1,1,1,0],[1,0,1,0],[1,0,0,1]],
-  D: [[1,1,1,0],[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,1,1,0]],
-  E: [[1,1,1,1],[1,0,0,0],[1,1,1,0],[1,0,0,0],[1,1,1,1]]
-};
-
-// Bold font for ARCADE (filled/solid style)
-const boldLetters = {
-  A: [[1,1,1,1,1],[1,1,0,1,1],[1,1,1,1,1],[1,1,0,1,1],[1,1,0,1,1]],
-  R: [[1,1,1,1,0],[1,1,0,1,1],[1,1,1,1,0],[1,1,0,1,1],[1,1,0,1,1]],
-  C: [[1,1,1,1,1],[1,1,0,0,0],[1,1,0,0,0],[1,1,0,0,0],[1,1,1,1,1]],
-  D: [[1,1,1,1,0],[1,1,0,1,1],[1,1,0,1,1],[1,1,0,1,1],[1,1,1,1,0]],
-  E: [[1,1,1,1,1],[1,1,0,0,0],[1,1,1,1,0],[1,1,0,0,0],[1,1,1,1,1]]
-};
+// Simplified maze layout (1 = wall, 0 = path, 2 = pellet, 3 = power pellet)
+const mazeLayout = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+  [1,3,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,3,1],
+  [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+  [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+  [1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1],
+  [1,1,1,1,1,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,1,1,1,0,0,1,1,1,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,1,0,0,0,0,0,0,1,0,1,1,2,1,1,1,1,1,1],
+  [0,0,0,0,0,0,2,0,0,0,1,0,0,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0],
+  [1,1,1,1,1,1,2,1,1,0,1,0,0,0,0,0,0,1,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+  [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+  [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+  [1,3,2,2,1,1,2,2,2,2,2,2,2,0,0,2,2,2,2,2,2,2,1,1,2,2,3,1],
+  [1,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,2,1,1,1],
+  [1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1],
+  [1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1],
+  [1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
 
 function create() {
-  const scene = this;
+  sceneRef = this;
   graphics = this.add.graphics();
 
-  // Build "PLATANUS HACK ARCADE" in cyan - centered and grid-aligned
-  // PLATANUS: 8 letters × (4 cols + 1 spacing) = 40 blocks, but last letter no spacing = 39 blocks × 15px = 585px
-  let x = Math.floor((800 - 585) / 2 / snakeSize) * snakeSize;
-  let y = Math.floor(180 / snakeSize) * snakeSize;
-  'PLATANUS'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0x00ffff);
-  });
-
-  // HACK: 4 letters × (4 cols + 1 spacing) = 20 blocks, but last letter no spacing = 19 blocks × 15px = 285px
-  x = Math.floor((800 - 285) / 2 / snakeSize) * snakeSize;
-  y = Math.floor(280 / snakeSize) * snakeSize;
-  'HACK'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0x00ffff);
-  });
-
-  // ARCADE: 6 letters × (5 cols + 1 spacing) = 36 blocks, but last letter no spacing = 35 blocks × 15px = 525px
-  x = Math.floor((800 - 525) / 2 / snakeSize) * snakeSize;
-  y = Math.floor(380 / snakeSize) * snakeSize;
-  'ARCADE'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0xff00ff, true);
-  });
-
   // Score display
-  scoreText = this.add.text(16, 16, 'Score: 0', {
-    fontSize: '24px',
+  scoreText = this.add.text(16, 16, 'SCORE: 0', {
+    fontSize: '18px',
     fontFamily: 'Arial, sans-serif',
-    color: '#00ff00'
+    color: '#ffffff'
+  });
+
+  // Lives display
+  livesText = this.add.text(680, 16, 'LIVES: 3', {
+    fontSize: '18px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffffff'
+  });
+
+  // Start instructions
+  startText = this.add.text(400, 300, 'PRESS SPACE TO START', {
+    fontSize: '32px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffff00',
+    align: 'center'
+  }).setOrigin(0.5);
+
+  // Blinking animation
+  this.tweens.add({
+    targets: startText,
+    alpha: { from: 1, to: 0.3 },
+    duration: 800,
+    yoyo: true,
+    repeat: -1
   });
 
   // Instructions
-  this.add.text(400, 560, 'Use Joystick to Move | Avoid Walls, Yourself & The Title!', {
-    fontSize: '16px',
+  this.add.text(400, 580, 'ARROW KEYS TO MOVE', {
+    fontSize: '14px',
     fontFamily: 'Arial, sans-serif',
     color: '#888888',
     align: 'center'
   }).setOrigin(0.5);
 
-  // Initialize snake (start top left)
-  snake = [
-    { x: 75, y: 60 },
-    { x: 60, y: 60 },
-    { x: 45, y: 60 }
-  ];
-
-  // Spawn initial food
-  spawnFood();
+  // Initialize game
+  initGame();
 
   // Keyboard and Arcade Button input
   this.input.keyboard.on('keydown', (event) => {
-    // Normalize keyboard input to arcade codes for easier testing
-    const key = KEYBOARD_TO_ARCADE[event.key] || event.key;
-
-    // Restart game (arcade buttons only)
-    if (gameOver && (key === 'P1A' || key === 'START1')) {
-      restartGame(scene);
+    if (!gameStarted && event.code === 'Space') {
+      startGame();
       return;
     }
 
-    // Direction controls (keyboard keys get mapped to arcade codes)
-    if (key === 'P1U' && direction.y === 0) {
+    if ((gameOver || gameWon) && event.code === 'KeyR') {
+      restartGame();
+      return;
+    }
+
+    if (!gameStarted || gameOver || gameWon) return;
+
+    if (event.code === 'ArrowUp') {
       nextDirection = { x: 0, y: -1 };
-    } else if (key === 'P1D' && direction.y === 0) {
+    } else if (event.code === 'ArrowDown') {
       nextDirection = { x: 0, y: 1 };
-    } else if (key === 'P1L' && direction.x === 0) {
+    } else if (event.code === 'ArrowLeft') {
       nextDirection = { x: -1, y: 0 };
-    } else if (key === 'P1R' && direction.x === 0) {
+    } else if (event.code === 'ArrowRight') {
       nextDirection = { x: 1, y: 0 };
     }
   });
@@ -207,111 +230,248 @@ function create() {
   playTone(this, 440, 0.1);
 }
 
-function drawLetter(char, startX, startY, color, useBold = false) {
-  const pattern = useBold ? boldLetters[char] : letters[char];
-  if (!pattern) return startX + 30;
+function initGame() {
+  walls = [];
+  pellets = [];
+  powerPellets = [];
+  ghosts = [];
 
-  for (let row = 0; row < pattern.length; row++) {
-    for (let col = 0; col < pattern[row].length; col++) {
-      if (pattern[row][col]) {
-        const blockX = startX + col * snakeSize;
-        const blockY = startY + row * snakeSize;
-        titleBlocks.push({ x: blockX, y: blockY, color: color });
+  for (let y = 0; y < mazeLayout.length; y++) {
+    for (let x = 0; x < mazeLayout[y].length; x++) {
+      const cell = mazeLayout[y][x];
+
+      if (cell === 1) {
+        walls.push({ x, y });
+      } else if (cell === 2) {
+        pellets.push({ x, y, eaten: false });
+      } else if (cell === 3) {
+        powerPellets.push({ x, y, eaten: false });
       }
     }
   }
-  return startX + (pattern[0].length + 1) * snakeSize;
+
+  // Initialize Pacman
+  pacman = {
+    gridX: 14,
+    gridY: 23,
+    x: offsetX + 14 * tileSize,
+    y: offsetY + 23 * tileSize
+  };
+
+  // Initialize ghosts (4 ghosts with different colors)
+  const ghostColors = [0xff0000, 0xffb8ff, 0x00ffff, 0xffb851];
+  for (let i = 0; i < 4; i++) {
+    ghosts.push({
+      gridX: 12 + i,
+      gridY: 14,
+      x: offsetX + (12 + i) * tileSize,
+      y: offsetY + 14 * tileSize,
+      color: ghostColors[i],
+      direction: { x: 0, y: -1 },
+      vulnerable: false
+    });
+  }
+
+  direction = { x: 0, y: 0 };
+  nextDirection = { x: 0, y: 0 };
+  powerMode = false;
+  powerTimer = 0;
+}
+
+function startGame() {
+  gameStarted = true;
+  if (startText) startText.destroy();
+  direction = { x: 1, y: 0 };
+  nextDirection = { x: 1, y: 0 };
 }
 
 function update(_time, delta) {
-  if (gameOver) return;
+  // Always draw the game
+  drawGame();
 
+  if (!gameStarted || gameOver || gameWon) return;
+
+  animTimer += delta;
+  if (animTimer > 150) {
+    mouthOpen = !mouthOpen;
+    animTimer = 0;
+  }
+
+  // Update power mode timer
+  if (powerMode) {
+    powerTimer += delta;
+    if (powerTimer >= powerDuration) {
+      powerMode = false;
+      powerTimer = 0;
+      ghosts.forEach(g => g.vulnerable = false);
+    }
+  }
+
+  // Move Pacman
   moveTimer += delta;
   if (moveTimer >= moveDelay) {
     moveTimer = 0;
-    direction = nextDirection;
-    moveSnake(this);
-  }
 
-  drawGame();
-}
+    // Try to change direction
+    const testX = pacman.gridX + nextDirection.x;
+    const testY = pacman.gridY + nextDirection.y;
+    if (!isWall(testX, testY)) {
+      direction = nextDirection;
+    }
 
-function moveSnake(scene) {
-  const head = snake[0];
-  const newHead = {
-    x: head.x + direction.x * snakeSize,
-    y: head.y + direction.y * snakeSize
-  };
+    // Move in current direction
+    const newX = pacman.gridX + direction.x;
+    const newY = pacman.gridY + direction.y;
 
-  // Check wall collision
-  if (newHead.x < 0 || newHead.x >= 800 || newHead.y < 0 || newHead.y >= 600) {
-    endGame(scene);
-    return;
-  }
+    if (!isWall(newX, newY)) {
+      pacman.gridX = newX;
+      pacman.gridY = newY;
 
-  // Check self collision
-  for (let segment of snake) {
-    if (segment.x === newHead.x && segment.y === newHead.y) {
-      endGame(scene);
-      return;
+      // Wrap around
+      if (pacman.gridX < 0) pacman.gridX = mazeWidth - 1;
+      if (pacman.gridX >= mazeWidth) pacman.gridX = 0;
+
+      pacman.x = offsetX + pacman.gridX * tileSize;
+      pacman.y = offsetY + pacman.gridY * tileSize;
+
+      // Check pellet collision
+      checkPelletCollision();
     }
   }
 
-  // Check title block collision
-  for (let block of titleBlocks) {
-    if (newHead.x === block.x && newHead.y === block.y) {
-      endGame(scene);
-      return;
-    }
+  // Move ghosts
+  ghostMoveTimer += delta;
+  if (ghostMoveTimer >= ghostMoveDelay) {
+    ghostMoveTimer = 0;
+    moveGhosts();
   }
 
-  snake.unshift(newHead);
+  // Check ghost collision
+  checkGhostCollision();
 
-  // Check food collision
-  if (newHead.x === food.x && newHead.y === food.y) {
-    score += 10;
-    scoreText.setText('Score: ' + score);
-    spawnFood();
-    playTone(scene, 880, 0.1);
-
-    if (moveDelay > 50) {  // Faster max speed (was 80ms)
-      moveDelay -= 2;
-    }
-  } else {
-    snake.pop();
+  // Check win condition
+  if (pellets.every(p => p.eaten) && powerPellets.every(p => p.eaten)) {
+    winGame();
   }
 }
 
-function spawnFood() {
-  let valid = false;
-  let attempts = 0;
+function isWall(gridX, gridY) {
+  if (gridY < 0 || gridY >= mazeLayout.length) return true;
+  if (gridX < 0 || gridX >= mazeLayout[0].length) return false; // Allow wrap
+  return mazeLayout[gridY][gridX] === 1;
+}
 
-  while (!valid && attempts < 100) {
-    attempts++;
-    const gridX = Math.floor(Math.random() * 53) * snakeSize;
-    const gridY = Math.floor(Math.random() * 40) * snakeSize;
+function checkPelletCollision() {
+  // Check regular pellets
+  for (let pellet of pellets) {
+    if (!pellet.eaten && pellet.x === pacman.gridX && pellet.y === pacman.gridY) {
+      pellet.eaten = true;
+      score += 10;
+      scoreText.setText('SCORE: ' + score);
+      playTone(sceneRef, 880, 0.05);
+    }
+  }
 
-    // Check not on snake
-    let onSnake = false;
-    for (let segment of snake) {
-      if (segment.x === gridX && segment.y === gridY) {
-        onSnake = true;
-        break;
+  // Check power pellets
+  for (let pellet of powerPellets) {
+    if (!pellet.eaten && pellet.x === pacman.gridX && pellet.y === pacman.gridY) {
+      pellet.eaten = true;
+      score += 50;
+      scoreText.setText('SCORE: ' + score);
+      powerMode = true;
+      powerTimer = 0;
+      ghosts.forEach(g => g.vulnerable = true);
+      playTone(sceneRef, 660, 0.2);
+    }
+  }
+}
+
+function moveGhosts() {
+  ghosts.forEach(ghost => {
+    // Simple AI: try to move towards/away from Pacman
+    let possibleDirs = [];
+
+    // Check all 4 directions
+    const dirs = [
+      { x: 0, y: -1 },
+      { x: 0, y: 1 },
+      { x: -1, y: 0 },
+      { x: 1, y: 0 }
+    ];
+
+    for (let dir of dirs) {
+      const newX = ghost.gridX + dir.x;
+      const newY = ghost.gridY + dir.y;
+
+      // Don't reverse direction
+      if (dir.x === -ghost.direction.x && dir.y === -ghost.direction.y) continue;
+
+      if (!isWall(newX, newY)) {
+        const dist = Math.abs(newX - pacman.gridX) + Math.abs(newY - pacman.gridY);
+        possibleDirs.push({ dir, dist });
       }
     }
 
-    // Check not on title blocks
-    let onTitle = false;
-    for (let block of titleBlocks) {
-      if (gridX === block.x && gridY === block.y) {
-        onTitle = true;
-        break;
-      }
+    if (possibleDirs.length > 0) {
+      // If vulnerable, run away (pick furthest). Otherwise chase (pick closest)
+      possibleDirs.sort((a, b) => ghost.vulnerable ? b.dist - a.dist : a.dist - b.dist);
+      ghost.direction = possibleDirs[0].dir;
     }
 
-    if (!onSnake && !onTitle) {
-      food = { x: gridX, y: gridY };
-      valid = true;
+    // Move ghost
+    ghost.gridX += ghost.direction.x;
+    ghost.gridY += ghost.direction.y;
+
+    // Wrap around
+    if (ghost.gridX < 0) ghost.gridX = mazeWidth - 1;
+    if (ghost.gridX >= mazeWidth) ghost.gridX = 0;
+
+    ghost.x = offsetX + ghost.gridX * tileSize;
+    ghost.y = offsetY + ghost.gridY * tileSize;
+  });
+}
+
+function checkGhostCollision() {
+  for (let i = 0; i < ghosts.length; i++) {
+    const ghost = ghosts[i];
+    if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
+      if (ghost.vulnerable) {
+        // Eat ghost
+        score += 200;
+        scoreText.setText('SCORE: ' + score);
+        ghost.gridX = 13 + i;
+        ghost.gridY = 14;
+        ghost.x = offsetX + ghost.gridX * tileSize;
+        ghost.y = offsetY + ghost.gridY * tileSize;
+        ghost.vulnerable = false;
+        playTone(sceneRef, 1200, 0.15);
+      } else {
+        // Lose a life
+        lives--;
+        livesText.setText('LIVES: ' + lives);
+
+        if (lives <= 0) {
+          endGame();
+        } else {
+          // Reset positions
+          pacman.gridX = 14;
+          pacman.gridY = 23;
+          pacman.x = offsetX + 14 * tileSize;
+          pacman.y = offsetY + 23 * tileSize;
+
+          for (let j = 0; j < ghosts.length; j++) {
+            ghosts[j].gridX = 12 + j;
+            ghosts[j].gridY = 14;
+            ghosts[j].x = offsetX + (12 + j) * tileSize;
+            ghosts[j].y = offsetY + 14 * tileSize;
+          }
+
+          direction = { x: 1, y: 0 };
+          nextDirection = { x: 1, y: 0 };
+          powerMode = false;
+          playTone(sceneRef, 220, 0.3);
+        }
+      }
     }
   }
 }
@@ -319,102 +479,196 @@ function spawnFood() {
 function drawGame() {
   graphics.clear();
 
-  // Draw title blocks
-  titleBlocks.forEach(block => {
-    graphics.fillStyle(block.color, 1);
-    graphics.fillRect(block.x, block.y, snakeSize - 2, snakeSize - 2);
+  // Draw maze walls
+  graphics.fillStyle(0x0000ff, 1);
+  walls.forEach(wall => {
+    graphics.fillRect(
+      offsetX + wall.x * tileSize + 1,
+      offsetY + wall.y * tileSize + 1,
+      tileSize - 2,
+      tileSize - 2
+    );
   });
 
-  // Draw snake
-  snake.forEach((segment, index) => {
-    if (index === 0) {
-      graphics.fillStyle(0x00ff00, 1);
-    } else {
-      graphics.fillStyle(0x00aa00, 1);
+  // Draw pellets
+  graphics.fillStyle(0xffb897, 1);
+  pellets.forEach(pellet => {
+    if (!pellet.eaten) {
+      graphics.fillCircle(
+        offsetX + pellet.x * tileSize + tileSize / 2,
+        offsetY + pellet.y * tileSize + tileSize / 2,
+        2
+      );
     }
-    graphics.fillRect(segment.x, segment.y, snakeSize - 2, snakeSize - 2);
   });
 
-  // Draw food
-  graphics.fillStyle(0xff0000, 1);
-  graphics.fillRect(food.x, food.y, snakeSize - 2, snakeSize - 2);
+  // Draw power pellets
+  graphics.fillStyle(0xffb897, 1);
+  powerPellets.forEach(pellet => {
+    if (!pellet.eaten) {
+      graphics.fillCircle(
+        offsetX + pellet.x * tileSize + tileSize / 2,
+        offsetY + pellet.y * tileSize + tileSize / 2,
+        5
+      );
+    }
+  });
+
+  // Draw Pacman
+  drawPacman();
+
+  // Draw ghosts
+  ghosts.forEach(ghost => {
+    if (ghost.vulnerable) {
+      const flicker = powerTimer > powerDuration - 2000 && Math.floor(powerTimer / 200) % 2;
+      graphics.fillStyle(flicker ? 0xffffff : 0x0000ff, 1);
+    } else {
+      graphics.fillStyle(ghost.color, 1);
+    }
+
+    // Ghost body
+    graphics.fillCircle(
+      ghost.x + tileSize / 2,
+      ghost.y + tileSize / 2 - 2,
+      tileSize / 2 - 2
+    );
+
+    graphics.fillRect(
+      ghost.x + 2,
+      ghost.y + tileSize / 2,
+      tileSize - 4,
+      tileSize / 2 - 2
+    );
+
+    // Ghost eyes (unless vulnerable)
+    if (!ghost.vulnerable) {
+      graphics.fillStyle(0xffffff, 1);
+      graphics.fillCircle(ghost.x + 6, ghost.y + 7, 2.5);
+      graphics.fillCircle(ghost.x + 12, ghost.y + 7, 2.5);
+      graphics.fillStyle(0x0000ff, 1);
+      graphics.fillCircle(ghost.x + 6, ghost.y + 7, 1);
+      graphics.fillCircle(ghost.x + 12, ghost.y + 7, 1);
+    }
+  });
 }
 
-function endGame(scene) {
-  gameOver = true;
-  playTone(scene, 220, 0.5);
+function drawPacman() {
+  graphics.fillStyle(0xffff00, 1);
 
-  // Semi-transparent overlay
-  const overlay = scene.add.graphics();
-  overlay.fillStyle(0x000000, 0.7);
+  if (mouthOpen) {
+    // Draw Pacman with mouth open
+    const startAngle = direction.x === 1 ? 0.25 :
+                       direction.x === -1 ? 1.25 :
+                       direction.y === -1 ? 1.75 : 0.75;
+
+    graphics.slice(
+      pacman.x + tileSize / 2,
+      pacman.y + tileSize / 2,
+      tileSize / 2 - 2,
+      Phaser.Math.DegToRad(startAngle * 180),
+      Phaser.Math.DegToRad((startAngle + 1.5) * 180),
+      false
+    );
+    graphics.fillPath();
+  } else {
+    // Draw Pacman with mouth closed (full circle)
+    graphics.fillCircle(
+      pacman.x + tileSize / 2,
+      pacman.y + tileSize / 2,
+      tileSize / 2 - 2
+    );
+  }
+}
+
+function winGame() {
+  gameWon = true;
+
+  const overlay = sceneRef.add.graphics();
+  overlay.fillStyle(0x000000, 0.8);
   overlay.fillRect(0, 0, 800, 600);
 
-  // Game Over title with glow effect
-  const gameOverText = scene.add.text(400, 300, 'GAME OVER', {
+  const winText = sceneRef.add.text(400, 250, 'YOU WIN!', {
     fontSize: '64px',
     fontFamily: 'Arial, sans-serif',
-    color: '#ff0000',
-    align: 'center',
-    stroke: '#ff6666',
+    color: '#ffff00',
+    stroke: '#000000',
     strokeThickness: 8
   }).setOrigin(0.5);
 
-  // Pulsing animation for game over text
-  scene.tweens.add({
-    targets: gameOverText,
-    scale: { from: 1, to: 1.1 },
-    alpha: { from: 1, to: 0.8 },
+  sceneRef.tweens.add({
+    targets: winText,
+    scale: { from: 1, to: 1.2 },
     duration: 800,
     yoyo: true,
-    repeat: -1,
-    ease: 'Sine.easeInOut'
+    repeat: -1
   });
 
-  // Score display
-  scene.add.text(400, 400, 'SCORE: ' + score, {
+  sceneRef.add.text(400, 350, 'SCORE: ' + score, {
     fontSize: '36px',
     fontFamily: 'Arial, sans-serif',
-    color: '#00ffff',
-    align: 'center',
-    stroke: '#000000',
-    strokeThickness: 4
+    color: '#ffffff'
   }).setOrigin(0.5);
 
-  // Restart instruction with subtle animation
-  const restartText = scene.add.text(400, 480, 'Press Button A or START to Restart', {
+  sceneRef.add.text(400, 450, 'Press R to Play Again', {
     fontSize: '24px',
     fontFamily: 'Arial, sans-serif',
-    color: '#ffff00',
-    align: 'center',
-    stroke: '#000000',
-    strokeThickness: 3
+    color: '#00ffff'
   }).setOrigin(0.5);
 
-  // Blinking animation for restart text
-  scene.tweens.add({
-    targets: restartText,
-    alpha: { from: 1, to: 0.3 },
-    duration: 600,
-    yoyo: true,
-    repeat: -1,
-    ease: 'Sine.easeInOut'
-  });
+  playTone(sceneRef, 660, 0.3);
 }
 
-function restartGame(scene) {
-  snake = [
-    { x: 75, y: 60 },
-    { x: 60, y: 60 },
-    { x: 45, y: 60 }
-  ];
-  direction = { x: 1, y: 0 };
-  nextDirection = { x: 1, y: 0 };
+function endGame() {
+  gameOver = true;
+  playTone(sceneRef, 220, 0.5);
+
+  const overlay = sceneRef.add.graphics();
+  overlay.fillStyle(0x000000, 0.8);
+  overlay.fillRect(0, 0, 800, 600);
+
+  const gameOverText = sceneRef.add.text(400, 250, 'GAME OVER', {
+    fontSize: '64px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ff0000',
+    stroke: '#000000',
+    strokeThickness: 8
+  }).setOrigin(0.5);
+
+  sceneRef.tweens.add({
+    targets: gameOverText,
+    alpha: { from: 1, to: 0.5 },
+    duration: 600,
+    yoyo: true,
+    repeat: -1
+  });
+
+  sceneRef.add.text(400, 350, 'SCORE: ' + score, {
+    fontSize: '36px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffffff'
+  }).setOrigin(0.5);
+
+  sceneRef.add.text(400, 450, 'Press R to Restart', {
+    fontSize: '24px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#00ffff'
+  }).setOrigin(0.5);
+}
+
+function restartGame() {
   score = 0;
+  lives = 3;
   gameOver = false;
-  moveDelay = 100;  // Match new faster initial speed
-  scoreText.setText('Score: 0');
-  spawnFood();
-  scene.scene.restart();
+  gameWon = false;
+  gameStarted = false;
+  moveTimer = 0;
+  ghostMoveTimer = 0;
+  animTimer = 0;
+
+  scoreText.setText('SCORE: 0');
+  livesText.setText('LIVES: 3');
+
+  sceneRef.scene.restart();
 }
 
 function playTone(scene, frequency, duration) {
