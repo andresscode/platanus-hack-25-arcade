@@ -311,16 +311,96 @@ function getCurrentLayout() {
 }
 
 function preload() {
-  // Load base64 images
-  this.load.image('banana', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAADsAAAA7AF5KHG9AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAA+1JREFUWIXtlVuIVVUYx3/f2nufvfeZM5fjJI4zRoYioWEJhtpDSGnihaiXiEAQ9MmHKKggepmXbkZEUElQD/WS6KMzag/iPGhpaFAZBRE2kE7e5nLmXPY5e+/19XA845zTeElzXvQPG9Za3/f9///1rcVecA93O5zpk/7+fnftkiXB0KlT8WwZMI3BO69tOxyODhdDPy6+tWvrttky4E6NPF2lCX7BtWVvefLIbBmY6kBlVXK6uKXKVwtGx5Osbpp1A2k+naee0uZqGMXJ/e8ee+aJWTPw6ZHN64CFAL5numxpLFzK3/tmw4Do3mWZC+3l42ecrhXVzio/nTMs9GLWPzCMlNyv/dXFF++ogWiw9yVFPwIw3UUkjElHunDum0QyMWk5+2qwevyDO2XAKLq1MdGyjxiLaYtIL+dABSdbeb92tHPH/ymqhzrmnPhyxRoAqQzOLwNhI+j0jSFGSc/mwU9w5hbAilIO3vDWTLx3O8K1Y12P4iQfS5isKYx2jA0dW/nDvwxIe4STL2FLPvZyDmmLcLpLoGDL/oGMO/msrOSm/5R6BDfxOl+xQbLTZJKFiKIVj/RSO6j8boA/mgomA0gcTFsVk62hpYD0QgeqBtNW3RRLOBZ/1/nmdUX3kql82769djx3NO4KIjoru4wf18UnA9KLHaCCwkGJBuZ/qMLLTQyZBHdeAaAuXnXBtZh8CRPW6jmpSTR2ftVEfrHinHHE9iH6oIpdLBnbI8ZKk6maix3LolWvsZQa0eVSPdSzzKbyIy0Pk+QinDklNDXYS7mpQvFjpCPCBDGI3qD/oDUPLfrYkt8Sk93hlnM7BaAyOP9zYHtrveTq9wEEWwixhQD0ysZE693IpOCmiNGrorEDNbcunphWWoCTgWvXyobzJQEo71/QZ0z6s0K+NdNka0i+hDgWTQ1a8tFyBlKDpi3komAUcVPEteClyJWvMN7OyJleFs07/31U8zfkn/tzHGDqnKLB3vWKHmD6C9ngNRaZU8aE1WkV1C+SSlPeTLBFn3Qiy9mL3ZcX94wskvVjE1M10xOjgZ6dKvLJjCwAborJRUiudk2xKcQOtpLBFgNoHIPKjnDLuS+aNtdaVxno3Y6wG9RrjTXBS5FMjLgKoogomjiQGmzNvSp6VembYOPIRhG0eXkGVA72PSXW7pvpTtwa5EQg0dOyabTQGpnxioYbzx5OE/dhRPfcprIFPgssT84kDtfowHREA73rVPRt4LH/IKwgQxZ9vW3zyMnrJd7QQAPV/b0PWcMLoI8DS4G+ZkGGgd9UZUhE94SbR4ZvhvemDbRCj8zNTZRCD6CzbCN5/q/KrXLdw92NfwC57adrhk6N8AAAAABJRU5ErkJggg==');
-  this.load.image('powerup-ice', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA7AAAAOwBeShxvQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAASVSURBVFiF7ZdNbFRVFMd/57ZT0pbQhE5RUbagIIjBkKDEdD7ExAWsBhMTKbKhtkNBEjFdSCa4QCGB0r4hdKNUF0a6gmiMOJ0ZEkWCmJBaENkZYkU6A6GBNnTad1z0veG96SdM3PFfnXvP1/+8e96578ETlIGwpefClp4rJ0ZlmRxeL9P/0QiELT0P1Cq8k4nLFa8uZOkqga+B4XRcNs43ppnLIJbQKs+yElgjcDGc1O1FYkndLnARWI2nqHXdGiiLQKhLX8sHGQ5Z2g5QOUpIoQeoQfmiaDgp1yj0VI4SAQhZ2l5X4G7E0g2z5Zj1CAw0KCwQ2ABw9kO5D2wPJTUtynGg1jEdFaU9vUuOub4CrwLVNiyZN4HYKa3I3+Kowo1gjmN5ZRABYKnXLtMqX0Y69ZIargCIzSt9bXK1JPYzAEYYjCW0Khdkt8Cy+iV80LtVJjxFPsTQEA1Ai8ChfJB+hFUAon4CAN6E0yQv+qjNi/kgvwscAlpuDxL02vkIZFvlplGiwFVgBcLnACosaUzovN+YxoRWqjiPfjLGcuCqGiJ9e+TfGQkApHZJ9m6Atc4Zu6iQBtpL3ohpEUtolTTQDlS4e6IcvxtgbaZFpgwtPwFVCVm6ZVGBMyo0e1WiHMgH6Y92anSm5NFOjeaD9ItywBdWaF5U4EzI0i2oii+udxGxtEnhpLMcVThloNuGGgELeN7x6rUn2GsMNwBsm2WmgiMoMcf3D5S4rYwYw07gbaDa0W1Lx+UrN6fvXM0E523Dd7ahr+oBPT/slduuLpbQl27Xs0eFj1FixvBW0c9wDaUWuKdwYDhAx287peCoL2w8rnurbJqAiC38MuMTmA/e6NKlE8KnwLslqm+BeDoufz1KvDlH8f+N0h5YrnAU+HHM0PNTi9xxdeu6NbCowB6B/cBC4D4PJ6Er3xPlk8V5OnoTMub6vnlEF48toEmUqF3BR9n3ZWAmAr4mBL6xbbqNUINgAS84XnM14TWFuIERG3YKbMVtQmVHepcU7xF/D6hKKMlmoFlgE1OP6E9jE0+1SQogbKkCpOMiMPka2gYLWFHiZyucBU5kWjmDiLoKfwIRzcTl9HCAzaKc8HET9tfnWOMmnw6pNknV51ijwn5fWOXEcIDNmbic9iafSgCIdmljXYHLKrR4tid0iIPec50JvQkZ0yEOAsULR4WWugKXo13aWGrvI9CY1KdtIQWsBK6j7HAquJVNyPhcyV1kEzIuyq3J7OwArgMrbSEV6dCnZiTQ0MCQQFJhX32O1WIYcCoYLE0S6dSV08meqgcBxDBQn2O1wj6B5OKl5Lx2vkno3NO73XXY0ucc8W+vXSip29RzWanhUqRL2/s8HyTAILAOm2d7E/IrcLiU5BQCpbBt/jGGcVHSAJsOa22hmqQoTSWm1Sp0hCx9OTBKq/Pl9DMQmVBuzpZj1kmYbZMLC2wWupWNV3NOoAkYQXivaDgpjwg0jVeTAUjH5TM7R122TS48NgGA79vkgSurcAfoV1ifbpWT7n66VU4qrAf6UYrT81Ea97EQtlTdYfS4KOvPSCFbjv8TAPwHafTPIV5ge84AAAAASUVORK5CYII=');
-  this.load.image('powerup-flame', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAD1AAAA9QHG8Yv2AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAohJREFUWIXtlr9rE2EYxz/v3aVJ2oiUNhZrc2kRRKEKCqJtRRRBlFJtotbVQRcdHPwHBEFEHBycXJyLtrQIHTpJB6mDONjBSagRS7HVmjTXH/bucdCiSe5HclWnPNs97/N8v5973pe7F+pRjy1GMZO+Ucya75fPd+wP069txdwaTD0AeYTQpWnayTAaRnhz86Yobm0+O7A7jE6oCeQvdO4Vxf3SrDojoP4LgO7Yd4GGEntkz0rW7P3nACvZrjSoc25rItyrdQo1A4jjDAC6x/IxK5O+/tcBlgfNU8Ws+USudMbA6QlAfGhl0tlqAQLHlR9ob9UNYwZoQ9RVNK4hciSgbR1NZZpGZieC9AMnoBv6baDtJ67cQWRXUA/QgCMjVrbzaFCh7wSW+s3mSJQcQlMVpm4x05hMHlKPX3/3KvCdQCTKkK+5JkTMPA37FkGJW0V3cWHhkp+H/xYIZ72WlOEQOzhPpGsJY0cRFbPd60QuhweAw+6qEO3+jJZY/y0U2/DS6AsFICcw2Dx8ZWG0F9C2r5XmUnkvqRa51BGvGYAkrpsKEOkoVOT05lX0Vsu9YdXxPOyeAOopNjBf0ZBYR3mM20i6Aiyo5588yALOgKCmKpLeLwOa69Be+Hn4Aihxhiv8rQiy6n6NsL9WbrVSVGhUDdA4lhsHmS7Pr71rQTZKW+3FOBtzidJC4U38wIdRP4/Af0Ehk+rWUS8FtpU0Rm30VgsVtXG+RbG/xPnz2CooOI7Tlxj/+HZLAADLg6nTmlLPyiF8RAuOyMXEWG4yqLaq33FiLDdpI70o9Sq4WqZtjZ5qzKHG24uAsjJmvxKGRHEc2PlraU4JU6Kp4cbR2QmF9zekHvUojx+EC8KFAt161wAAAABJRU5ErkJggg==');
-  this.load.image('powerup-thunder', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA3QAAAN0BcFOiBwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFGSURBVFiFxZavT8RAEEbflKN3AQUWi8Odb48gcARHgkOBgQT4Q4AEw6GQBEWCQ5Ac1eBwWDQK6JUfg29y1+1sm/3szuz30iYvK6qKLRKRdS9QCtJ833gJYgbIupuo3AKQ5mIFiKyLqByZd70BsrgPDMIB6MxxE+U2gIe5JdCtcAAdPQBmwwDcyzyw21R5fYBedwd0IRCARMBhk+X1ALJ4A1gOB9CQeMpxU3EW99HoydSgcs3ga3vSsdsX8BGP6Mq042oAf/EM/QC8xCPv5OMrO4C/eC5Z1w87gJ94vvmR86qhql+wZywH5Ia1zzc/AJUXe//vidOY/U0IPPYmLY9I81WXK+xPsmkRPXUdbQPglaS4CwlwBvoXCKBaPC0DVIunTQAn8bQI4Cae9gAcxdMWwIikeA4HUEM85XQ8q4eILJKMncVTzj+e+2DJc7znZQAAAABJRU5ErkJggg==');
+  // Textures are generated procedurally in create()
 }
 
 function create() {
   sceneRef = this;
   graphics = this.add.graphics();
+
+  // Generate procedural textures for game items
+  // Banana texture - curved yellow banana shape
+  const bananaGfx = this.add.graphics();
+  bananaGfx.fillStyle(0xffe135, 1);
+  // Main banana body - curved shape using multiple circles
+  bananaGfx.fillEllipse(16, 14, 18, 10);
+  bananaGfx.fillEllipse(14, 18, 14, 8);
+  bananaGfx.fillEllipse(18, 18, 14, 8);
+  bananaGfx.fillEllipse(16, 22, 12, 6);
+  // Banana highlights
+  bananaGfx.fillStyle(0xfff5a0, 1);
+  bananaGfx.fillEllipse(14, 15, 4, 2);
+  bananaGfx.fillEllipse(18, 17, 3, 2);
+  // Banana stem
+  bananaGfx.fillStyle(0x8b7355, 1);
+  bananaGfx.fillRect(15, 8, 2, 4);
+  bananaGfx.generateTexture('banana', 32, 32);
+  bananaGfx.destroy();
+
+  // Powerup-ice texture - ice crystal/snowflake shape
+  const iceGfx = this.add.graphics();
+  iceGfx.fillStyle(0x88ddff, 1);
+  // Center crystal
+  iceGfx.fillCircle(16, 16, 6);
+  // Six pointed ice crystal arms
+  iceGfx.fillRect(14, 8, 4, 16); // vertical
+  iceGfx.fillRect(8, 14, 16, 4); // horizontal
+  iceGfx.fillRect(11, 11, 10, 3); // diagonal 1
+  iceGfx.fillRect(11, 18, 10, 3); // diagonal 2
+  // Ice highlights
+  iceGfx.fillStyle(0xddffffff, 1);
+  iceGfx.fillCircle(14, 14, 2);
+  iceGfx.fillCircle(18, 18, 2);
+  // Outer crystals
+  iceGfx.fillStyle(0x00ffff, 1);
+  iceGfx.fillCircle(16, 8, 2);
+  iceGfx.fillCircle(16, 24, 2);
+  iceGfx.fillCircle(8, 16, 2);
+  iceGfx.fillCircle(24, 16, 2);
+  iceGfx.generateTexture('powerup-ice', 32, 32);
+  iceGfx.destroy();
+
+  // Powerup-flame texture - flame shape
+  const flameGfx = this.add.graphics();
+  // Outer flame - dark red
+  flameGfx.fillStyle(0xff4500, 1);
+  flameGfx.fillEllipse(16, 20, 14, 18);
+  flameGfx.fillEllipse(16, 14, 12, 14);
+  flameGfx.fillEllipse(16, 10, 8, 10);
+  // Mid flame - orange
+  flameGfx.fillStyle(0xff8c00, 1);
+  flameGfx.fillEllipse(16, 20, 10, 14);
+  flameGfx.fillEllipse(16, 14, 8, 10);
+  flameGfx.fillEllipse(16, 10, 6, 8);
+  // Inner flame - yellow/white
+  flameGfx.fillStyle(0xffd700, 1);
+  flameGfx.fillEllipse(16, 20, 6, 10);
+  flameGfx.fillEllipse(16, 14, 5, 6);
+  // Flame core
+  flameGfx.fillStyle(0xffff00, 1);
+  flameGfx.fillEllipse(16, 18, 4, 6);
+  flameGfx.generateTexture('powerup-flame', 32, 32);
+  flameGfx.destroy();
+
+  // Powerup-thunder texture - lightning bolt shape
+  const thunderGfx = this.add.graphics();
+  thunderGfx.fillStyle(0xffff00, 1);
+  // Lightning bolt using polygon
+  thunderGfx.beginPath();
+  thunderGfx.moveTo(18, 6);
+  thunderGfx.lineTo(12, 16);
+  thunderGfx.lineTo(16, 16);
+  thunderGfx.lineTo(14, 26);
+  thunderGfx.lineTo(20, 16);
+  thunderGfx.lineTo(16, 16);
+  thunderGfx.closePath();
+  thunderGfx.fillPath();
+  // White highlight on bolt
+  thunderGfx.fillStyle(0xffffff, 1);
+  thunderGfx.fillRect(15, 10, 2, 6);
+  thunderGfx.fillRect(16, 18, 2, 4);
+  thunderGfx.generateTexture('powerup-thunder', 32, 32);
+  thunderGfx.destroy();
 
   // Load high score from localStorage with error handling
   try {
